@@ -1,4 +1,10 @@
 .idea/
-__pycache__
+**/__pycache__/
 checkpoints
 *.pth
+images/
+my_images/
+grounding_dino/labels/
+grounding_dino/labels_filtered/
+grounding_dino/labels_manual/
+visualization/
