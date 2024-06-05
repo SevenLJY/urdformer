@@ -264,12 +264,11 @@ def add_handle_if_needed(boxes, min_dim=50):
     return new_boxes
 
 
-def visualize_bbox(image, save_path, bboxes):
+def visualize_bbox(image, save_path, bboxes, thickness=3):
     for bounding_box in bboxes:
         start_point = (bounding_box[1], bounding_box[0])  # Top left corner
         end_point = (bounding_box[3], bounding_box[2])  # Bottom right corner
         color = (255, 0, 0)  # Blue color in BGR
-        thickness = 3  # Line thickness
         # Draw the rectangle
         image = cv2.rectangle(image, start_point, end_point, color, thickness)
     cv2.imwrite(f"{save_path}.png", image)

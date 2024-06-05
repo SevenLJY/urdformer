@@ -1,30 +1,16 @@
-# import numpy as np
-
-# label3 = np.load("grounding_dino/labels_manual/label3.npy", allow_pickle=True).item()
-# nbbox = label3["part_normalized_bbox"]
-# bbox = label3["bbox"]
-
-
 import numpy as np
-import PIL
 from urdformer import URDFormer
-import json
 import torch
-import cv2
 import pybullet as p
-from utils import visualization_global, visualization_parts, detection_config, create_obj
+from utils import  visualization_parts
 import torchvision.transforms as transforms
-from PIL import Image
 from scipy.spatial.transform import Rotation as Rot
 import argparse
-from texture import load_texture
-from utils import write_numpy
-from utils import write_urdfs
-from grounding_dino.detection import detector
-from grounding_dino.post_processing import post_processing, summary_kitchen
 import os
 import time
 import glob
+import PIL
+from tqdm import tqdm
 
 # integrate the extracted texture map into URDFormer prediction
 def evaluate_real_image(image_tensor, bbox, masks, tgt_padding_mask, tgt_padding_relation_mask, urdformer, device):
@@ -109,29 +95,6 @@ def evaluate_parts_with_masks(data_path, cropped_image):
 
     return image_tensor, np.array([padded_bbox]), np.array([padded_masks]), tgt_padding_mask, tgt_padding_relation_mask
 
-def get_binary_relation(global_relations, position_pred_global, num_roots):
-
-    new_relations = np.zeros((len(position_pred_global) + num_roots, len(position_pred_global) + num_roots, 6))
-    for obj_id, position in enumerate(position_pred_global):
-        each_parent = np.unravel_index(np.argmax(global_relations[num_roots + obj_id]),
-                                       global_relations[num_roots + obj_id].shape)
-        parent_id = each_parent[0]
-        relation_id = each_parent[1]
-        new_relations[obj_id + num_roots, parent_id, relation_id] = 1
-    return new_relations
-
-def get_binary_relation_parts(part_relations, position_pred_part, num_roots):
-    all_new_relations = []
-    for obj_id, each_position in enumerate(position_pred_part):
-        new_relations = np.zeros((len(position_pred_part[obj_id]) + num_roots, len(position_pred_part[obj_id]) + num_roots, 6))
-        for part_id, position in enumerate(position_pred_part[obj_id]):
-            part_relations[obj_id][num_roots + part_id][num_roots + part_id] = -1000000000*np.ones(6)# the parent of the one can't be itself...if so, go to the next one.
-            each_parent = np.unravel_index(np.argmax(part_relations[obj_id][num_roots + part_id]), part_relations[obj_id][num_roots + part_id].shape)
-            parent_id = each_parent[0]
-            relation_id = each_parent[1]
-            new_relations[part_id + num_roots, parent_id, relation_id] = 1
-        all_new_relations.append(new_relations)
-    return all_new_relations
 
 def get_camera_parameters_move(traj_i):
     all_p2s = np.arange(-0.5, 1.5, 0.1)
@@ -154,9 +117,8 @@ def traj_camera(view_matrix):
     rgb = np.array(color)[:,:, :3]
     return rgb
 
-def animate(object_id, link_orientations, test_name, headless = False):
-
-    for i in range(20):
+def animate(object_id, link_orientations, test_name, headless = False, n_states=3):
+    for i in range(n_states):
         for jid in range(p.getNumJoints(object_id)):
             ji = p.getJointInfo(object_id, jid)
             if ji[16]==-1 and ji[2] == 1:
@@ -171,35 +133,13 @@ def animate(object_id, link_orientations, test_name, headless = False):
                     jointpos = np.random.uniform(-0.7, -0.25)
                 p.resetJointState(object_id, jid, jointpos)
         if headless:
-            os.makedirs(f"visualization/{test_name}", exist_ok=True)
+            os.makedirs(f"my_visualization/{test_name}", exist_ok=True)
             view_matrix = get_camera_parameters_move(i)
             rgb = traj_camera(view_matrix)
-            PIL.Image.fromarray(rgb).save(f"visualization/{test_name}/{i}.png")
+            PIL.Image.fromarray(rgb).save(f"my_visualization/{test_name}/{i}.png")
 
         time.sleep(0.5)
 
-def process_prediction(part_meshes, part_positions_starts, part_positions_ends, part_relations, base_pred):
-    new_part_relations = get_binary_relation_parts(part_relations, part_positions_starts, 1)
-
-    pred_data = {}
-    if np.array(base_pred)[0] not in [1,2,3,4,5,7]: # if its not cabinet, shelf, oven, dishwasher, washer and fridge, count as rigid
-        part_meshes = []
-        part_positions_starts = []
-        part_positions_ends = []
-        new_part_relations = np.zeros((1,1, 6))
-    else:
-        part_meshes = np.array(part_meshes)[0]
-        part_positions_starts = np.array(part_positions_starts)[0]
-        part_positions_ends = np.array(part_positions_ends)[0]
-        new_part_relations = np.array(new_part_relations)[0]
-
-    pred_data['part_meshes'] = [part_meshes]
-    pred_data['part_positions_start'] = [part_positions_starts]
-    pred_data['part_positions_end'] = [part_positions_ends]
-    pred_data['part_relations'] = [new_part_relations]
-    pred_data['part_bases'] = [np.array(base_pred)[0]]
-
-    return pred_data
 
 def object_prediction(img_path, label_final_dir, urdformer_part, device, with_texture, if_random, headless=False):
 
@@ -283,17 +223,105 @@ def evaluate(args, with_texture=False, headless = False):
     checkpoint = torch.load(part_checkpoint)
     urdformer_part.load_state_dict(checkpoint['model_state_dict'])
 
-    for img_path in glob.glob(input_path+"/*"):
+    for img_path in tqdm(glob.glob(input_path+"/*")):
+        if img_path == 'my_images/val_StorageFurniture_47466_18.png': # buggy output
+            # Error msg: corrupted size vs. prev_size
+            # from: util.create_articulated_objects, obj = p.createMultiBody (line 75)
+            continue
+        if os.path.exists(f"my_visualization/{os.path.basename(img_path)[:-4]}"):
+            continue
+        print(f"Processing {img_path}...")
         p.resetSimulation()
         object_prediction(img_path, label_dir, urdformer_part, device, with_texture, args.random, headless=headless)
 
+def collect_html(args):
+    html_header = """
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Attention Map Visualizations</title>
+        <style>
+            table {
+                width: 100%;
+                border-collapse: collapse;
+            }
+            th, td {
+                border: 1px solid black;
+                padding: 8px;
+                text-align: left;
+            }
+            .separator {
+                border-top: 2px solid black;
+            }
+        </style>
+    </head>
+    <body>
+        <table>
+            <tr>
+                <th>ID</th>
+                <th>Input Image</th>
+                <th>Input GT Bbox</th>
+                <th>Output</th>
+            </tr>
+    """
+    img_dir = args.image_path
+    bbox_dir = 'grounding_dino/labels_manual'
+    out_dir = args.output_path
+    html = html_header
+    
+    for fpath in os.listdir(img_dir):
+        if fpath.startswith('test') and fpath.endswith('.png'):
+            fname = fpath[:-4]
+            html += f"""
+                    <tr>
+                        <td>{fname}</td>
+                        <td><img src="{os.path.join('../', img_dir, fpath)}" alt="GT" style="height: 224px; width: auto;">
+                        <td><img src="{os.path.join('../', bbox_dir, fpath)}" alt="GT" style="height: 224px; width: auto;"></td>
+                        <td>
+                        <img src="{os.path.join(fname, '0.png')}" alt="Generated Item" style="height: 224px; width: auto;">
+                        <img src="{os.path.join(fname, '1.png')}" alt="Generated Item" style="height: 224px; width: auto;">
+                        <img src="{os.path.join(fname, '2.png')}" alt="Generated Item" style="height: 224px; width: auto;">
+                        </td>
+                    </tr>
+                    <tr class="separator"><td colspan="3"></td></tr>
+                    """
+            
+    html += '</table></body></html>'
+    with open(os.path.join(out_dir, f'test.html'), 'w') as f:
+        f.write(html)
+        
+    html = html_header    
+    for fpath in os.listdir(img_dir):
+        if fpath.startswith('val') and fpath.endswith('.png'):
+            fname = fpath[:-4]
+            html += f"""
+                    <tr>
+                        <td>{fname}</td>
+                        <td><img src="{os.path.join('../', img_dir, fpath)}" alt="GT" style="height: 224px; width: auto;">
+                        <td><img src="{os.path.join('../', bbox_dir, fpath)}" alt="GT" style="height: 224px; width: auto;"></td>
+                        <td>
+                        <img src="{os.path.join(fname, '0.png')}" alt="Generated Item" style="height: 224px; width: auto;">
+                        <img src="{os.path.join(fname, '1.png')}" alt="Generated Item" style="height: 224px; width: auto;">
+                        <img src="{os.path.join(fname, '2.png')}" alt="Generated Item" style="height: 224px; width: auto;">
+                        </td>
+                    </tr>
+                    <tr class="separator"><td colspan="3"></td></tr>
+                    """
+            
+    html += '</table></body></html>'
+    
+    with open(os.path.join(out_dir, f'val.html'), 'w') as f:
+        f.write(html)
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--texture', action='store_true', help='adding texture')
     parser.add_argument('--headless', action='store_true', help='option to run in headless mode')
     parser.add_argument('--scene_type', '--scene_type', default='cabinet', type=str)
-    parser.add_argument('--image_path', '--image_path', default='images', type=str)
+    parser.add_argument('--image_path', '--image_path', default='my_images', type=str)
+    parser.add_argument('--output_path', '--output_path', default='my_visualization', type=str)
     parser.add_argument('--random', '--random', action='store_true', help='use random meshes from partnet?')
 
     ##################### IMPORTANT! ###############################
@@ -303,6 +331,8 @@ def main():
 
     args = parser.parse_args()
     evaluate(args, with_texture=args.texture, headless=args.headless)
+    
+    collect_html(args)
 
 
 if __name__ == "__main__":

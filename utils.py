@@ -72,10 +72,10 @@ def create_articulated_objects(root, root_scale, root_position, root_orientation
         root, links,  linkJointAxis, jointtypes = domain_randomization(root, links, random_frame, linkJointAxis, jointtypes)
     collisionIndices, visualIndices, link_positions = visual_collision_shapes(links, link_scales, link_positions)
     obj = p.createMultiBody(baseMass=0,
-                          baseCollisionShapeIndex=p.createCollisionShape(shapeType=p.GEOM_MESH, fileName=root, meshScale=root_scale),
-                          baseVisualShapeIndex=p.createVisualShape(shapeType=p.GEOM_MESH, fileName=root, meshScale=root_scale),
-                          basePosition=root_position,
-                          baseOrientation=root_orientation,
+                            baseCollisionShapeIndex=p.createCollisionShape(shapeType=p.GEOM_MESH, fileName=root, meshScale=root_scale),
+                            baseVisualShapeIndex=p.createVisualShape(shapeType=p.GEOM_MESH, fileName=root, meshScale=root_scale),
+                            basePosition=root_position,
+                            baseOrientation=root_orientation,
                             linkMasses=[0.2] * len(jointtypes),
                             linkCollisionShapeIndices=collisionIndices,
                             linkVisualShapeIndices=visualIndices,
@@ -381,6 +381,7 @@ def manual_label(img, bbox):
 
 
 def visualization_parts(p, root_position, root_orientation, root_scale, mesh_base, position_pred_ori, scale_pred_ori, mesh_pred_ori, parent_pred_ori, texture_list, if_random, filename="output"):
+    num_parts = len(mesh_pred_ori)
     num_roots = 1
 
     part_names = ['none', 'drawer', 'doorL', 'doorR',
@@ -409,11 +410,6 @@ def visualization_parts(p, root_position, root_orientation, root_scale, mesh_bas
     parent_pred = []
     relations_pred = []
 
-
-
-
-
-
     if mesh_base >=9: # rigid objects
         object_path = "meshes/{}.obj".format(base_names[mesh_base])
         obj = create_obj(p, object_path, root_scale, root_position, root_orientation)
@@ -427,6 +423,10 @@ def visualization_parts(p, root_position, root_orientation, root_scale, mesh_bas
         for i, each_parent in enumerate(parent_pred_ori[num_roots:]):
             each_parent = np.unravel_index(np.argmax(each_parent), each_parent.shape)
             parent_id = each_parent[0]
+            # [EDIT by ljy] if invalid parent prediction
+            if parent_id >= num_parts: 
+                parent_id = 0
+            #########################################
             parent_pred.append(parent_id)
             relations_pred.append(each_parent[1])
 
