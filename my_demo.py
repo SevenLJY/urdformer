@@ -1,3 +1,10 @@
+# import numpy as np
+
+# label3 = np.load("grounding_dino/labels_manual/label3.npy", allow_pickle=True).item()
+# nbbox = label3["part_normalized_bbox"]
+# bbox = label3["bbox"]
+
+
 import numpy as np
 import PIL
 from urdformer import URDFormer
@@ -5,11 +12,12 @@ import json
 import torch
 import cv2
 import pybullet as p
-from utils import visualization_global, visualization_parts, detection_config
+from utils import visualization_global, visualization_parts, detection_config, create_obj
 import torchvision.transforms as transforms
 from PIL import Image
 from scipy.spatial.transform import Rotation as Rot
 import argparse
+from texture import load_texture
 from utils import write_numpy
 from utils import write_urdfs
 from grounding_dino.detection import detector
@@ -17,10 +25,6 @@ from grounding_dino.post_processing import post_processing, summary_kitchen
 import os
 import time
 import glob
-import tkinter as tk
-from tkinter import filedialog, simpledialog
-from PIL import Image, ImageTk
-from labeller import BoundingBoxApp
 
 # integrate the extracted texture map into URDFormer prediction
 def evaluate_real_image(image_tensor, bbox, masks, tgt_padding_mask, tgt_padding_relation_mask, urdformer, device):
@@ -129,40 +133,52 @@ def get_binary_relation_parts(part_relations, position_pred_part, num_roots):
         all_new_relations.append(new_relations)
     return all_new_relations
 
+def get_camera_parameters_move(traj_i):
+    all_p2s = np.arange(-0.5, 1.5, 0.1)
+    p1 = 1.5
+    p2 = all_p2s[traj_i]
+    c2 = 0.5
 
-def process_gt(gt_data):
-    part_meshes = gt_data['part_meshes']
-    part_positions_starts = gt_data['part_positions_start']
-    part_positions_ends = gt_data['part_positions_end']
-    new_part_relations = gt_data['part_relations']
-    base_pred = gt_data['part_bases']
+    p3 = 1.2
+    c3 = 0.5
 
-    new_starts = []
-    new_ends = []
-    for part_id, each_gt_start in enumerate(part_positions_starts):
-        new_gt_start = [0, each_gt_start[0], each_gt_start[1]]
-        new_gt_end = [0, part_positions_ends[part_id][0], part_positions_ends[part_id][1]]
+    view_matrix = p.computeViewMatrix([p1, p2, p3], [0, c2, c3], [0, 0, 1])
+    return view_matrix
 
-        new_starts.append(new_gt_start)
-        new_ends.append(new_gt_end)
+def traj_camera(view_matrix):
+    zfar, znear = 0.01, 10
+    fov, aspect, nearplane, farplane = 60, 1, 0.01, 100
+    projection_matrix = p.computeProjectionMatrixFOV(fov, aspect, nearplane, farplane)
+    light_pos = [3, 1.5, 5]
+    _, _, color, depth, segm= p.getCameraImage(512, 512, view_matrix, projection_matrix, light_pos, shadow=1, flags=p.ER_SEGMENTATION_MASK_OBJECT_AND_LINKINDEX, renderer=p.ER_BULLET_HARDWARE_OPENGL)
+    rgb = np.array(color)[:,:, :3]
+    return rgb
 
-    new_data = {}
-    new_data['part_meshes'] = [np.array(part_meshes)]
-    new_data['part_positions_start'] = [np.array(new_starts)]
-    new_data['part_positions_end'] = [np.array(new_ends)]
-    new_data['part_relations'] = [np.array(new_part_relations)]
-    new_data['part_bases'] = [np.array(base_pred)]
+def animate(object_id, link_orientations, test_name, headless = False):
 
+    for i in range(20):
+        for jid in range(p.getNumJoints(object_id)):
+            ji = p.getJointInfo(object_id, jid)
+            if ji[16]==-1 and ji[2] == 1:
+                jointpos = np.random.uniform(0.2, 0.4)
+                p.resetJointState(object_id, jid, jointpos)
+            if ji[16]==-1 and ji[2] == 0:
+                if link_orientations[int(ji[1][5:])-1][-1] == -1:
+                    jointpos = np.random.uniform(0.5, 1)
+                elif ji[13][1] == 1:
+                    jointpos = np.random.uniform(0.25, 0.7)
+                else:
+                    jointpos = np.random.uniform(-0.7, -0.25)
+                p.resetJointState(object_id, jid, jointpos)
+        if headless:
+            os.makedirs(f"visualization/{test_name}", exist_ok=True)
+            view_matrix = get_camera_parameters_move(i)
+            rgb = traj_camera(view_matrix)
+            PIL.Image.fromarray(rgb).save(f"visualization/{test_name}/{i}.png")
 
-    return new_data
-
-
-def animate():
-
-    time.sleep(0.2)
+        time.sleep(0.5)
 
 def process_prediction(part_meshes, part_positions_starts, part_positions_ends, part_relations, base_pred):
-
     new_part_relations = get_binary_relation_parts(part_relations, part_positions_starts, 1)
 
     pred_data = {}
@@ -185,94 +201,108 @@ def process_prediction(part_meshes, part_positions_starts, part_positions_ends, 
 
     return pred_data
 
+def object_prediction(img_path, label_final_dir, urdformer_part, device, with_texture, if_random, headless=False):
 
-def evaluate(args, detection_args):
+    parent_pred_parts = []
+    position_pred_end_parts = []
+    position_pred_start_parts = []
+    mesh_pred_parts = []
+    base_types = []
+
+    test_name = os.path.basename(img_path)[:-4]
+    image = np.array(PIL.Image.open(img_path).convert("RGB"))
+    image_tensor_part, bbox_part, masks_part, tgt_padding_mask_part, tgt_padding_relation_mask_part = evaluate_parts_with_masks(
+        f"{label_final_dir}/{test_name}.npy", image)
+
+    position_pred_part, position_pred_end_part, mesh_pred_part, parent_pred_part, base_pred = evaluate_real_image(
+        image_tensor_part, bbox_part, masks_part, tgt_padding_mask_part, tgt_padding_relation_mask_part,
+        urdformer_part, device)
+
+    size_scale = 4
+    scale_pred_part = abs(np.array(size_scale * (position_pred_end_part - position_pred_part) / 12))
+
+    root_position = [0, 0, 0]
+    root_orientation = [0, 0, 0, 1]
+    root_scale = [1, 1, 1]
+
+    if base_pred[0] == 5:
+        root_scale[2]*=2
+
+    scale_pred_part[:, 2] *= root_scale[2]
+
+    ##################################################
+    parent_pred_parts.append(np.array(parent_pred_part))
+    position_pred_end_parts.append(np.array(position_pred_end_part[:, 1:]))
+    position_pred_start_parts.append(np.array(position_pred_part[:, 1:]))
+    mesh_pred_parts.append(np.array(mesh_pred_part))
+    base_types.append(base_pred[0])
+
+    # visualization
+    texture_list = []
+    if with_texture:
+        ############## load texture if needed ##################
+        label_path = f"{label_final_dir}/{test_name}.npy"
+        object_info = np.load(label_path, allow_pickle=True).item()
+        bboxes = object_info['part_normalized_bbox']
+
+        for bbox_id in range(len(bboxes)):
+            if os.path.exists(f"textures/{test_name}/{bbox_id}.png"):
+                texture_list.append(f"textures/{test_name}/{bbox_id}.png")
+            else:
+                print('no texture map found! Run get_texture.py first')
+
+
+    object_id, link_orientations = visualization_parts(p, root_position, root_orientation, root_scale, base_pred[0],
+                                                       position_pred_part, scale_pred_part, mesh_pred_part,
+                                                       parent_pred_part, texture_list, if_random, filename=f"output/{test_name}")
+
+
+
+    animate(object_id, link_orientations, test_name, headless=headless)
+
+    root = "meshes/cabinet.obj"
+
+    time.sleep(1)
+
+def evaluate(args, with_texture=False, headless = False):
+    device = "cuda"
     input_path = args.image_path
-    print('************ Applying Finetuned (Model Soup) GroundingDINO *******************')
-    detector(args.scene_type, detection_args)
-    # #
-    # # # run postprocessing
-    label_dir = 'grounding_dino/labels'
-    save_dir = 'grounding_dino/labels_filtered'
-    manual_dir = 'grounding_dino/labels_manual'
-    post_processing(label_dir, input_path, save_dir)
-    # # ask user to for manual correction
-    #
-    for img_path in glob.glob(f"{input_path}/*"):
-        label_name = os.path.basename(img_path)[:-4]
-        label_path = f"grounding_dino/labels_filtered/{label_name}.npy"
-        labeled_boxes = np.load(label_path, allow_pickle=True).item()
-        normalized_bboxes = labeled_boxes['part_normalized_bbox']
-        root = tk.Tk()
-        app = BoundingBoxApp(root, img_path, initial_boxes=normalized_bboxes, save_path = manual_dir)
-        root.mainloop()
+    label_dir = "grounding_dino/labels_manual"
+    if headless:
+        physicsClient = p.connect(p.DIRECT)
+    else:
+        physicsClient = p.connect(p.GUI)
+    p.setGravity(0, 0, -10)
+    p.configureDebugVisualizer(1, lightPosition=(1250, 100, 2000), rgbBackground=(1, 1, 1))
 
-    if args.scene_type=="kitchen":
-        detection_args = detection_config(args)
-        # # get the part detection
-        os.makedirs(f"{manual_dir}/parts/images", exist_ok=True)
-        os.makedirs(f"{manual_dir}/parts/labels", exist_ok=True)
-        os.makedirs(f"{manual_dir}/parts/labels_filtered", exist_ok=True)
-        os.makedirs(f"{manual_dir}/parts/labels_manual", exist_ok=True)
-        for each_img_path in glob.glob('images/*'):
-            label_name = os.path.basename(each_img_path)[:-4]
-            each_global_label = f"grounding_dino/labels_manual/{label_name}.npy"
-            global_data = np.load(each_global_label, allow_pickle=True).item()
-            all_bboxes = global_data['part_normalized_bbox']
-            image_global = np.array(Image.open(each_img_path).convert("RGB"))
-            for bbox_id, each_obj_bbox in enumerate(all_bboxes):
-                bounding_box = [int(each_obj_bbox[0] * image_global.shape[0]),
-                                int(each_obj_bbox[1] * image_global.shape[1]),
-                                int((each_obj_bbox[0] + each_obj_bbox[2]) * image_global.shape[0]),
-                                int((each_obj_bbox[1] + each_obj_bbox[3]) * image_global.shape[1]),
-                                ]
-                cropped_image = image_global[bounding_box[0]:bounding_box[2], bounding_box[1]:bounding_box[3]]
-                # save the croppd_images in to the folder and update input
-                PIL.Image.fromarray(cropped_image).resize((512, 512)).save(f"{manual_dir}/parts/images/{label_name}_{bbox_id}.png")
+    ########################  URDFormer Core  ##############################
+    num_relations = 6 # the dimension of the relationship embedding
+    urdformer_part = URDFormer(num_relations=num_relations, num_roots=1)
+    urdformer_part = urdformer_part.to(device)
+    part_checkpoint = "checkpoints/part.pth"
+    checkpoint = torch.load(part_checkpoint)
+    urdformer_part.load_state_dict(checkpoint['model_state_dict'])
 
-        # run detection module again for each cropped images to get part bboxes
-        detection_args['out_dir'] = "grounding_dino/labels_manual/parts/labels"
-        detection_args['inputs'] = "grounding_dino/labels_manual/parts/images"
-        detector('object', detection_args)
-        #
-        # # run postprocessing
-        part_label_dir = 'grounding_dino/labels_manual/parts/labels'
-        part_save_dir = 'grounding_dino/labels_manual/parts/labels_filtered'
-        part_manual_dir = 'grounding_dino/labels_manual/parts/labels_manual'
-
-        post_processing(part_label_dir, "grounding_dino/labels_manual/parts/images", part_save_dir)
-
-        # ask user for manual correction
-        for img_path in glob.glob("grounding_dino/labels_manual/parts/images/*"):
-
-            label_name = os.path.basename(img_path)[:-4]
-            label_path = f"{part_save_dir}/{label_name}.npy"
-            labeled_boxes = np.load(label_path, allow_pickle=True).item()
-
-            normalized_bboxes = labeled_boxes['part_normalized_bbox']
-            root = tk.Tk()
-            app = BoundingBoxApp(root, img_path, initial_boxes=normalized_bboxes, save_path = part_manual_dir)
-            root.mainloop()
-
-        save_dir = f'{manual_dir}/all'
-        summary_kitchen(manual_dir, part_manual_dir, "images", save_dir)
-
+    for img_path in glob.glob(input_path+"/*"):
+        p.resetSimulation()
+        object_prediction(img_path, label_dir, urdformer_part, device, with_texture, args.random, headless=headless)
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('-scene_type', '--scene_type', default='cabinet', type=str)
-    parser.add_argument('-image_path', '--image_path', default='my_images', type=str)
+    parser.add_argument('--texture', action='store_true', help='adding texture')
+    parser.add_argument('--headless', action='store_true', help='option to run in headless mode')
+    parser.add_argument('--scene_type', '--scene_type', default='cabinet', type=str)
+    parser.add_argument('--image_path', '--image_path', default='images', type=str)
+    parser.add_argument('--random', '--random', action='store_true', help='use random meshes from partnet?')
 
     ##################### IMPORTANT! ###############################
     # URDFormer replies on good bounding boxes of parts and ojects, you can achieve this by our annotation tool (~1min label per image)
-    # We also provided our finetuned GroundingDINO (model soup version) to automate this. We finetuned GroundingDino on our generated dataset, and
-    # apply model soup for the pretrained and finetuned GroundingDINO. However, the perfect bbox prediction is not gauranteed and will be our future work.
+    # We also provided our finetuned GroundingDINO (model soup version) to automate/initialize this. We finetuned GroundingDino on our generated dataset, and
+    # apply model soup for the pretrained and finetuned GroundingDINO. However, the performance of bbox prediction is not gauranteed and will be our future work.
 
     args = parser.parse_args()
-    detection_args = detection_config(args) # leave the defult groundingDINO argument unchanged
-
-    evaluate(args, detection_args)
+    evaluate(args, with_texture=args.texture, headless=args.headless)
 
 
 if __name__ == "__main__":
