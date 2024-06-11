@@ -1,3 +1,11 @@
+## Our Added Files
+```
+my_prepare_img.py # preprocess our testing images
+my_get_bbox.py    # prepare input bboxes for our testing images
+my_demo.py        # test on our testing images
+prepare_svrao_data.py # prepare our input data from their demo data
+```
+
 # URDFormer
 
 [**URDFormer: A Pipeline for Constructing Articulated Simulation Environments from Real-World Images**](https://drive.google.com/file/d/1vXcBgf--ySQWeh3VFIiigAV8_cZi_Kzv/view?usp=sharing)  
