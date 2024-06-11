@@ -56,10 +56,10 @@ def normalize_bbox(bboxes, w=224, h=224):
     normalize_bboxes = []
     for bbox in bboxes:
         normalized = [
-            bbox[1] / w,
-            bbox[0] / h,
-            (bbox[3] - bbox[1]) / w,
-            (bbox[2] - bbox[0]) / h,
+            bbox[0] / w,
+            bbox[1] / h,
+            (bbox[2] - bbox[0]) / w,
+            (bbox[3] - bbox[1]) / h,
         ]
         normalize_bboxes.append(normalized)
     return normalize_bboxes
@@ -69,8 +69,6 @@ def prepare_gt_bbox(args):
     manual_dir = "grounding_dino/labels_manual"
     for f in tqdm(os.listdir(input_path)):
         if f.endswith(".png"):
-            # f = 'val_StorageFurniture_45776_19.png'
-            # print(f)
             data = {}
             src_img_path = os.path.join(input_path, f)
             dst_img_path = os.path.join(manual_dir, f[:-4])
