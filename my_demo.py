@@ -163,37 +163,12 @@ def traj_camera(view_matrix):
     rgb = np.array(color)[:, :, :3]
     return rgb
 
-
-# def animate(object_id, link_orientations, test_name, headless = False, n_states=3):
-#     for i in range(n_states):
-#         for jid in range(p.getNumJoints(object_id)):
-#             ji = p.getJointInfo(object_id, jid)
-#             if ji[16]==-1 and ji[2] == 1:
-#                 jointpos = np.random.uniform(0.2, 0.4)
-#                 p.resetJointState(object_id, jid, jointpos)
-#             if ji[16]==-1 and ji[2] == 0:
-#                 if link_orientations[int(ji[1][5:])-1][-1] == -1:
-#                     jointpos = np.random.uniform(0.5, 1)
-#                 elif ji[13][1] == 1:
-#                     jointpos = np.random.uniform(0.25, 0.7)
-#                 else:
-#                     jointpos = np.random.uniform(-0.7, -0.25)
-#                 p.resetJointState(object_id, jid, jointpos)
-#         if headless:
-#             os.makedirs(f"my_visualization/{test_name}", exist_ok=True)
-#             view_matrix = get_camera_parameters_move(i)
-#             rgb = traj_camera(view_matrix)
-#             PIL.Image.fromarray(rgb).save(f"my_visualization/{test_name}/{i}.png")
-
-#         time.sleep(0.5)
-
-
-def animate(object_id, link_orientations, test_name, headless=False, n_states=3):
+def animate(object_id, link_orientations, test_name, headless=False, n_states=3, output_path=None):
     joint_states = {
         "prismatic": [0, 0.4, 0.8],
         "revolute1": [0, 0.4, 0.8],
         "revolute2": [0, 0.4, 0.8],
-        "revolute3": [0, -0.5, -1],
+        "revolute3": [0, -0.4, -0.8],
     }
     for i in range(n_states):
         for jid in range(p.getNumJoints(object_id)):
@@ -214,16 +189,17 @@ def animate(object_id, link_orientations, test_name, headless=False, n_states=3)
                     jointpos = joint_states["revolute3"][i] + perturb
                 p.resetJointState(object_id, jid, jointpos)
         if headless:
-            os.makedirs(f"my_visualization/{test_name}", exist_ok=True)
+            os.makedirs(f"{output_path}/{test_name}", exist_ok=True)
             view_matrix = get_camera_parameters_move(i)
             rgb = traj_camera(view_matrix)
-            PIL.Image.fromarray(rgb).save(f"my_visualization/{test_name}/{i}.png")
+            PIL.Image.fromarray(rgb).save(f"{output_path}/{test_name}/{i}.png")
 
         time.sleep(0.5)
 
 
 def object_prediction(
     img_path,
+    output_path,
     label_final_dir,
     urdformer_part,
     device,
@@ -240,6 +216,7 @@ def object_prediction(
 
     test_name = os.path.basename(img_path)[:-4]
     image = np.array(PIL.Image.open(img_path).convert("RGB"))
+
     (
         image_tensor_part,
         bbox_part,
@@ -314,10 +291,10 @@ def object_prediction(
         filename=f"output/{test_name}",
     )
 
-    animate(object_id, link_orientations, test_name, headless=headless)
+    animate(object_id, link_orientations, test_name, headless=headless, output_path=output_path)
 
     graph_img = viz_graph(tree, res=256)
-    PIL.Image.fromarray(graph_img).save(f"my_visualization/{test_name}/graph.png")
+    PIL.Image.fromarray(graph_img).save(f"{output_path}/{test_name}/graph.png")
 
     time.sleep(1)
 
@@ -325,6 +302,8 @@ def object_prediction(
 def evaluate(args, with_texture=False, headless=False):
     device = "cuda"
     input_path = args.image_path
+    output_path = args.output_path
+    os.makedirs(output_path, exist_ok=True)
     label_dir = "grounding_dino/labels_manual"
     if headless:
         physicsClient = p.connect(p.DIRECT, options="--renderDevice=egl")
@@ -343,16 +322,21 @@ def evaluate(args, with_texture=False, headless=False):
     checkpoint = torch.load(part_checkpoint)
     urdformer_part.load_state_dict(checkpoint["model_state_dict"])
     for img_path in tqdm(glob.glob(input_path+"/*")):
-        if img_path == 'my_images/val_StorageFurniture_47466_18.png': # buggy output
+        if img_path in ['my_images/val_StorageFurniture_47466_18.png']: # buggy output
             # Error msg: corrupted size vs. prev_size
             # from: util.create_articulated_objects, obj = p.createMultiBody (line 75)
             continue
-        if os.path.exists(f"my_visualization/{os.path.basename(img_path)[:-4]}"):
+        if img_path in ['my_images/val_StorageFurniture_45444_18.png']: # buggy output
+            # Error msg: IndexError: list index out of range
+            # from: link_names[link_id + 1], link_names[linkparents[link_id]] (line 1685, in write_urdf)
+            continue
+        if os.path.exists(f"{output_path}/{os.path.basename(img_path)[:-4]}"):
             continue
         print(f"Processing {img_path}...")
         p.resetSimulation()
         object_prediction(
             img_path,
+            output_path,
             label_dir,
             urdformer_part,
             device,
