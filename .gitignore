@@ -165,4 +165,6 @@ grounding_dino/labels_filtered/
 grounding_dino/labels_manual/
 visualization/
 my_visualization/
+my_visualization_old/
 output/
+output_old/
