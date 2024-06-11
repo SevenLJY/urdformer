@@ -342,9 +342,7 @@ def evaluate(args, with_texture=False, headless=False):
     part_checkpoint = "checkpoints/part.pth"
     checkpoint = torch.load(part_checkpoint)
     urdformer_part.load_state_dict(checkpoint["model_state_dict"])
-
     for img_path in tqdm(glob.glob(input_path+"/*")):
-    # for img_path in tqdm([input_path + "/test_StorageFurniture_45135_19.png"]):
         if img_path == 'my_images/val_StorageFurniture_47466_18.png': # buggy output
             # Error msg: corrupted size vs. prev_size
             # from: util.create_articulated_objects, obj = p.createMultiBody (line 75)
@@ -371,7 +369,7 @@ def collect_html(args):
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Attention Map Visualizations</title>
+        <title>URDFormer Qualitative</title>
         <style>
             table {
                 width: 100%;
@@ -391,30 +389,35 @@ def collect_html(args):
         <table>
     """
     img_dir = args.image_path
+    pred_bbox_dir = "grounding_dino/labels_filtered"
     bbox_dir = "grounding_dino/labels_manual"
     out_dir = args.output_path
     html = html_header
 
-    for fpath in os.listdir(img_dir):
+    file_list = os.listdir(img_dir)
+    file_list.sort()
+    for fpath in file_list:
         if fpath.startswith("test") and fpath.endswith(".png"):
             fname = fpath[:-4]
             html += f"""
                     <tr>
                         <th>ID</th>
                         <th>Input Image</th>
+                        <th>Predicted Bbox</th>
                         <th>Input GT Bbox</th>
                         <th>Output Graph</th>
-                        <th>Output Shape</th>
+                        <th>Output Shape (Animate at 3 States)</th>
                     </tr>
                     <tr>
-                        <td>{fname}</td>
-                        <td><img src="{os.path.join('../', img_dir, fpath)}" alt="GT" style="height: 224px; width: auto;">
-                        <td><img src="{os.path.join('../', bbox_dir, fpath)}" alt="GT" style="height: 224px; width: auto;"></td>
-                        <img src="{os.path.join(fname, 'graph.png')}" alt="Generated Item" style="height: 224px; width: auto;">
+                        <td style="height: 200px; width: 50px;">{fname}</td>
+                        <td><img src="{os.path.join('../', img_dir, fpath)}" alt="Input Image" style="height: 200px; width: auto;">
+                        <td><img src="{os.path.join('../', pred_bbox_dir, fname + '.npy.png')}" alt="predicted Bbox" style="height: 200px; width: auto;"></td>
+                        <td><img src="{os.path.join('../', bbox_dir, fpath)}" alt="GT Bbox" style="height: 200px; width: auto;"></td>
+                        <td><img src="{os.path.join(fname, 'graph.png')}" alt="Graph" style="height: 200px; width: auto;"></td>
                         <td>
-                        <img src="{os.path.join(fname, '0.png')}" alt="Generated Item" style="height: 224px; width: auto;">
-                        <img src="{os.path.join(fname, '1.png')}" alt="Generated Item" style="height: 224px; width: auto;">
-                        <img src="{os.path.join(fname, '2.png')}" alt="Generated Item" style="height: 224px; width: auto;">
+                        <img src="{os.path.join(fname, '0.png')}" alt="Generated Item" style="height: 200px; width: auto;">
+                        <img src="{os.path.join(fname, '1.png')}" alt="Generated Item" style="height: 200px; width: auto;">
+                        <img src="{os.path.join(fname, '2.png')}" alt="Generated Item" style="height: 200px; width: auto;">
                         </td>
                     </tr>
                     <tr class="separator"><td colspan="3"></td></tr>
@@ -425,18 +428,28 @@ def collect_html(args):
         f.write(html)
 
     html = html_header
-    for fpath in os.listdir(img_dir):
+    for fpath in file_list:
         if fpath.startswith("val") and fpath.endswith(".png"):
             fname = fpath[:-4]
             html += f"""
                     <tr>
-                        <td>{fname}</td>
-                        <td><img src="{os.path.join('../', img_dir, fpath)}" alt="GT" style="height: 224px; width: auto;">
-                        <td><img src="{os.path.join('../', bbox_dir, fpath)}" alt="GT" style="height: 224px; width: auto;"></td>
+                        <th>ID</th>
+                        <th>Input Image</th>
+                        <th>Predicted Bbox</th>
+                        <th>Input GT Bbox</th>
+                        <th>Output Graph</th>
+                        <th>Output Shape (Animate at 3 States)</th>
+                    </tr>
+                    <tr>
+                        <td style="height: 200px; width: 50px;">{fname}</td>
+                        <td><img src="{os.path.join('../', img_dir, fpath)}" alt="Input Image" style="height: 200px; width: auto;">
+                        <td><img src="{os.path.join('../', pred_bbox_dir, fname + '.npy.png')}" alt="predicted Bbox" style="height: 200px; width: auto;"></td>
+                        <td><img src="{os.path.join('../', bbox_dir, fpath)}" alt="GT Bbox" style="height: 200px; width: auto;"></td>
+                        </td><img src="{os.path.join(fname, 'graph.png')}" alt="Graph" style="height: 200px; width: auto;"></td>
                         <td>
-                        <img src="{os.path.join(fname, '0.png')}" alt="Generated Item" style="height: 224px; width: auto;">
-                        <img src="{os.path.join(fname, '1.png')}" alt="Generated Item" style="height: 224px; width: auto;">
-                        <img src="{os.path.join(fname, '2.png')}" alt="Generated Item" style="height: 224px; width: auto;">
+                        <img src="{os.path.join(fname, '0.png')}" alt="Generated Item" style="height: 200px; width: auto;">
+                        <img src="{os.path.join(fname, '1.png')}" alt="Generated Item" style="height: 200px; width: auto;">
+                        <img src="{os.path.join(fname, '2.png')}" alt="Generated Item" style="height: 200px; width: auto;">
                         </td>
                     </tr>
                     <tr class="separator"><td colspan="3"></td></tr>
