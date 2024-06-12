@@ -1,10 +1,13 @@
 import os
+import json
 import torch
 import cv2 as cv
 import numpy as np
 from tqdm import tqdm
 import matplotlib.pyplot as plt
+import xml.etree.ElementTree as ET
 import torchvision.transforms as T
+from utils import viz_graph
 from segment_anything import sam_model_registry, SamPredictor
 
 # load SAM model
@@ -76,7 +79,10 @@ def sam_seg(img, save_dir, bbox_data, img_size=224):
         _show_box(box, ax)
     fig.savefig(os.path.join(save_dir, 'segs.png'))
     # save the seg masks
+    
     np.save(os.path.join(save_dir, 'segs.npy'), np_part_masks.squeeze(1))
+    # project the part masks to 16x16 patches
+    _project_patch_mask(np_part_masks.squeeze(1), save_dir)
 
 def _extract_patch_features(img):
     # prepare input image to DINO
@@ -90,6 +96,59 @@ def dinov2_feat(img, save_dir):
     feat_reg, feat = _extract_patch_features(img)
     np.save(os.path.join(save_dir, 'dinov2_patch_reg.npy'), feat_reg)
     np.save(os.path.join(save_dir, 'dinov2_patch.npy'), feat)
+
+def _project_patch_mask(segs, save_dir):
+    # segs shape: (n_parts, 224, 224)
+    n_parts = len(segs)
+    masks = np.empty((n_parts, 256), dtype=bool)
+    for i in range(n_parts):
+        seg_i = segs[i]
+        # patchify the image into 16x16 patches
+        n_patches = 16
+        patch_size = 14
+        mask_i = np.mean(seg_i.reshape(n_patches, patch_size, n_patches, patch_size), axis=(1, 3))
+        mask_i = mask_i > 0.
+        # [DEBUG] visualize
+        # seg_i_img = seg_i.astype(np.uint8)*255
+        # cv.imwrite(f'part_{i}.png', seg_i_img)
+        # mask_i_img = mask_i.astype(np.uint8)*255
+        # cv.imwrite(f'part_{i}_mask.png', mask_i_img)
+        m_flatten = mask_i.reshape(-1)
+        masks[i] = m_flatten
+    
+    np.save(os.path.join(save_dir, 'patch_part_masks.npy'), masks)
+
+def save_json_from_urdf(urdf, save_dir):
+    tree = ET.parse(urdf)
+    root = tree.getroot()
+    # mapping from link name to part id
+    part_id_map = {}
+    # extract the graph structure
+    out = {'meta': {"obj_cat": "StorageFurniture",}, 'diffuse_tree':[]}
+    for i, link in enumerate(root.iter('link')):
+        node = {}
+        node['id'] = i
+        node['name'] = link.attrib['name']
+        node['children'] = []
+        node['parent'] = -1
+        out['diffuse_tree'].append(node)
+        part_id_map[link.attrib['name']] = i
+    
+    for joint in root.iter('joint'):
+        parent = joint.find('parent').attrib['link']
+        child = joint.find('child').attrib['link']
+        parent_id = part_id_map[parent]
+        child_id = part_id_map[child]
+        out['diffuse_tree'][parent_id]['children'].append(child_id)
+        out['diffuse_tree'][child_id]['parent'] = parent_id
+    
+    # visualize the graph
+    img_graph = viz_graph(out['diffuse_tree'])
+    cv.imwrite(os.path.join(save_dir, 'graph.png'), img_graph)
+
+    # save to json
+    with open(os.path.join(save_dir, 'graph.json'), 'w') as f:
+        json.dump(out, f)
 
 if __name__ == '__main__':
     src_img_dir = 'images'
@@ -109,5 +168,7 @@ if __name__ == '__main__':
             sam_seg(img, save_dir, bbox_data)
             # extract patch features using DINO
             dinov2_feat(img, save_dir)
+            # load urdf and save the graph structure
+            save_json_from_urdf(os.path.join('output', file[:-4] + '.urdf'), save_dir)
 
         
