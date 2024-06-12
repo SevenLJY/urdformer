@@ -163,7 +163,15 @@ def traj_camera(view_matrix):
     rgb = np.array(color)[:, :, :3]
     return rgb
 
-def animate(object_id, link_orientations, test_name, headless=False, n_states=3, output_path=None):
+
+def animate(
+    object_id,
+    link_orientations,
+    test_name,
+    headless=False,
+    n_states=3,
+    output_path=None,
+):
     joint_states = {
         "prismatic": [0, 0.4, 0.8],
         "revolute1": [0, 0.4, 0.8],
@@ -291,7 +299,13 @@ def object_prediction(
         filename=f"output/{test_name}",
     )
 
-    animate(object_id, link_orientations, test_name, headless=headless, output_path=output_path)
+    animate(
+        object_id,
+        link_orientations,
+        test_name,
+        headless=headless,
+        output_path=output_path,
+    )
 
     graph_img = viz_graph(tree, res=256)
     PIL.Image.fromarray(graph_img).save(f"{output_path}/{test_name}/graph.png")
@@ -321,12 +335,18 @@ def evaluate(args, with_texture=False, headless=False):
     part_checkpoint = "checkpoints/part.pth"
     checkpoint = torch.load(part_checkpoint)
     urdformer_part.load_state_dict(checkpoint["model_state_dict"])
-    for img_path in tqdm(glob.glob(input_path+"/*")):
-        if img_path in ['my_images/val_StorageFurniture_47466_18.png']: # buggy output
+    for img_path in tqdm(glob.glob(input_path + "/*")):
+        if img_path in ["my_images/val_StorageFurniture_47466_18.png"]:  # buggy output
             # Error msg: corrupted size vs. prev_size
             # from: util.create_articulated_objects, obj = p.createMultiBody (line 75)
             continue
-        if img_path in ['my_images/val_StorageFurniture_45444_18.png']: # buggy output
+        if img_path in [
+            "my_images/val_StorageFurniture_45444_18.png",
+            "my_images/test_StorageFurniture_46655_18.png",
+            "my_images/val_StorageFurniture_48013_19.png",
+            "my_images/val_StorageFurniture_46563_18.png",
+            "my_images/test_StorageFurniture_46655_19.png"
+        ]:  # buggy output
             # Error msg: IndexError: list index out of range
             # from: link_names[link_id + 1], link_names[linkparents[link_id]] (line 1685, in write_urdf)
             continue
