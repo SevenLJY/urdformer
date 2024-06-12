@@ -158,6 +158,7 @@ cython_debug/
 **/__pycache__/
 checkpoints
 *.pth
+*.urdf
 images/
 my_images/
 grounding_dino/labels/
