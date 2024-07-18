@@ -66,7 +66,7 @@ def normalize_bbox(bboxes, w=224, h=224):
 
 def prepare_gt_bbox(args):
     input_path = args.image_path
-    manual_dir = "grounding_dino/labels_manual"
+    manual_dir = "test_data/labels_gt"
     for f in tqdm(os.listdir(input_path)):
         if f.endswith(".png"):
             data = {}
@@ -74,15 +74,14 @@ def prepare_gt_bbox(args):
             dst_img_path = os.path.join(manual_dir, f[:-4])
             img = cv.imread(src_img_path)
             tokens = f[:-4].split("_")
-            model_id = f"{tokens[1]}/{tokens[2]}"
-            img_id = tokens[3]
+            model_id = f"{tokens[0]}/{tokens[1]}"
+            img_id = tokens[2]
             bboxes = get_part_bbox(model_id, img_id)
             visualize_bbox(img, dst_img_path, bboxes, thickness=2)
             normalize_bboxes = normalize_bbox(bboxes)
             data['bbox'] = bboxes
             data['part_normalized_bbox'] = normalize_bboxes
             np.save(f"{manual_dir}/{f[:-4]}.npy", data)
-            
 
 
 def evaluate(args, detection_args):
@@ -93,26 +92,17 @@ def evaluate(args, detection_args):
     detector(args.scene_type, detection_args)
     # #
     # # # run postprocessing
-    label_dir = "grounding_dino/labels"
-    save_dir = "grounding_dino/labels_filtered"
-    manual_dir = "grounding_dino/labels_manual"
+    label_dir = "test_data/labels_pred"
+    save_dir = "test_data/labels_filtered"
+
     post_processing(label_dir, input_path, save_dir)
-
-    # # # ask user to for manual correction
-    # for img_path in glob.glob(f"{input_path}/*"):
-    #     label_name = os.path.basename(img_path)[:-4]
-    #     label_path = f"grounding_dino/labels_filtered/{label_name}.npy"
-    #     labeled_boxes = np.load(label_path, allow_pickle=True).item()
-    #     normalized_bboxes = labeled_boxes['part_normalized_bbox']
-    #     root = tk.Tk()
-    #     app = BoundingBoxApp(root, img_path, initial_boxes=normalized_bboxes, save_path = manual_dir)
-    #     root.mainloop()
-
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("-scene_type", "--scene_type", default="cabinet", type=str)
-    parser.add_argument("-image_path", "--image_path", default="my_images", type=str)
+    # detection arguments
+    parser.add_argument("--scene_type", default="all", type=str)
+    parser.add_argument("--image_path", default="test_data/images", type=str)
+    parser.add_argument("--pred_save_dir", default="test_data/labels_pred", type=str)
 
     ##################### IMPORTANT! ###############################
     # URDFormer replies on good bounding boxes of parts and ojects, you can achieve this by our annotation tool (~1min label per image)
@@ -124,8 +114,8 @@ def main():
         args
     )  # leave the defult groundingDINO argument unchanged
 
-    prepare_gt_bbox(args)
-    # evaluate(args, detection_args)
+    # prepare_gt_bbox(args)
+    evaluate(args, detection_args)
 
 
 if __name__ == "__main__":

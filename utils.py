@@ -251,7 +251,7 @@ def detection_config(args):
     detection_args["print_result"] = False
     detection_args["palette"] = "none"
     detection_args["custom_entities"] = False
-    detection_args["out_dir"] = "grounding_dino/labels"
+    detection_args["out_dir"] = args.pred_save_dir
 
     return detection_args
 
@@ -585,7 +585,7 @@ def my_visualization_parts(
     if len(position_pred_ori) > 0 and mesh_base == 6:
         mesh_base = 1
 
-    root = "meshes/{}.obj".format(base_names[mesh_base])
+    root = f"meshes/{base_names[mesh_base]}.obj"
 
     position_type = np.arange(13) / 12
     links = []
@@ -600,7 +600,7 @@ def my_visualization_parts(
     relations_pred = []
 
     if mesh_base >= 9:  # rigid objects
-        object_path = "meshes/{}.obj".format(base_names[mesh_base])
+        object_path = f"meshes/{base_names[mesh_base]}.obj"
         obj = create_obj(p, object_path, root_scale, root_position, root_orientation)
         p.changeVisualShape(obj, -1, rgbaColor=[0.6, 0.6, 0.6, 1])
         # if base_names[mesh_base]=="square_table":
@@ -999,6 +999,7 @@ def my_visualization_parts(
         linkparents,
         jointtypes,
         linkJointAxis,
+        mesh_dir="../../../meshes",
     )
 
     return obj, link_orientations, tree
@@ -1511,6 +1512,7 @@ def write_urdfs(
     linkparents,
     jointtypes,
     linkJointAxis,
+    mesh_dir="../meshes",
 ):
     root_rot = Rot.from_quat(root_orientation).as_rotvec()
     import xml.etree.ElementTree as ET
@@ -1551,7 +1553,7 @@ def write_urdfs(
         visual_geometry,
         "mesh",
         attrib={
-            "filename": "../meshes/cabinet.obj",
+            "filename": f"{mesh_dir}/cabinet.obj",
             "scale": "{0} {1} {2}".format(root_scale[0], root_scale[1], root_scale[2]),
         },
     )
@@ -1572,7 +1574,7 @@ def write_urdfs(
         collision_geometry,
         "mesh",
         attrib={
-            "filename": "../meshes/cabinet.obj",
+            "filename": f"{mesh_dir}/cabinet.obj",
             "scale": "{0} {1} {2}".format(root_scale[0], root_scale[1], root_scale[2]),
         },
     )
@@ -1636,7 +1638,7 @@ def write_urdfs(
             visual_geometry,
             "mesh",
             attrib={
-                "filename": "../meshes/parts/{}".format(os.path.basename(link_info)),
+                "filename": f"{mesh_dir}/parts/{os.path.basename(link_info)}",
                 "scale": "{0} {1} {2}".format(
                     link_scales[link_id][0],
                     link_scales[link_id][1],
@@ -1652,7 +1654,7 @@ def write_urdfs(
             collision_geometry,
             "mesh",
             attrib={
-                "filename": "../meshes/parts/{}".format(os.path.basename(link_info)),
+                "filename": f"{mesh_dir}/parts/{os.path.basename(link_info)}",
                 "scale": "{0} {1} {2}".format(
                     link_scales[link_id][0],
                     link_scales[link_id][1],
