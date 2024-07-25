@@ -11,6 +11,7 @@ from urdformer import URDFormer
 import torchvision.transforms as transforms
 from utils import my_visualization_parts, viz_graph
 
+
 def get_camera_parameters_move(traj_i):
     all_p2s = np.arange(-0.5, 1.5, 0.1)
     p1 = 1.5
@@ -22,6 +23,7 @@ def get_camera_parameters_move(traj_i):
 
     view_matrix = p.computeViewMatrix([p1, p2, p3], [0, c2, c3], [0, 0, 1])
     return view_matrix
+
 
 # integrate the extracted texture map into URDFormer prediction
 def evaluate_real_image(
@@ -83,6 +85,7 @@ def evaluate_real_image(
         base_pred.detach().cpu().numpy(),
     )
 
+
 def image_transform():
     """Constructs the image preprocessing transform object.
 
@@ -102,6 +105,7 @@ def image_transform():
     )
 
     return preprocessing
+
 
 def evaluate_parts_with_masks(data_path, cropped_image):
     max_bbox = 32
@@ -140,6 +144,7 @@ def evaluate_parts_with_masks(data_path, cropped_image):
         tgt_padding_relation_mask,
     )
 
+
 def traj_camera(view_matrix):
     zfar, znear = 0.01, 10
     fov, aspect, nearplane, farplane = 60, 1, 0.01, 100
@@ -177,7 +182,7 @@ def object_prediction(
 
     output_dir = f"{exp_dir}/{test_name}"
     os.makedirs(output_dir, exist_ok=True)
-    save_visuals_dir = f'{output_dir}/visuals'
+    save_visuals_dir = f"{output_dir}/visuals"
     os.makedirs(save_visuals_dir, exist_ok=True)
 
     image = np.array(PIL.Image.open(img_path).convert("RGB"))
@@ -221,11 +226,12 @@ def object_prediction(
     scale_pred_part[:, 2] *= root_scale[2]
 
     ##################################################
-    parent_pred_parts.append(np.array(parent_pred_part))
-    position_pred_end_parts.append(np.array(position_pred_end_part[:, 1:]))
-    position_pred_start_parts.append(np.array(position_pred_part[:, 1:]))
-    mesh_pred_parts.append(np.array(mesh_pred_part))
-    base_types.append(base_pred[0])
+    # These are never used
+    # parent_pred_parts.append(np.array(parent_pred_part))
+    # position_pred_end_parts.append(np.array(position_pred_end_part[:, 1:]))
+    # position_pred_start_parts.append(np.array(position_pred_part[:, 1:]))
+    # mesh_pred_parts.append(np.array(mesh_pred_part))
+    # base_types.append(base_pred[0])
 
     # save the urdf file
     post = '_random' if if_random else ''
@@ -242,16 +248,16 @@ def object_prediction(
         [],
         if_random,
         filename=f"{output_dir}/object{post}",
-    )
+    ) # template meshes
 
     ##################################################
-
 
     # animate the object and save the renderings
     animate(
         object_id,
         link_orientations,
         save_dir=save_visuals_dir,
+        if_random=if_random,
     )
     # save the graph visualization
     graph_img = viz_graph(tree, res=256)
@@ -260,14 +266,14 @@ def object_prediction(
     time.sleep(1)
 
 
-
 def animate(
     object_id,
     link_orientations,
     n_states=3,
     save_dir=None,
+    if_random=False,
 ):
-    
+    postfix = "_random" if if_random else ""
     joint_states = {
         "prismatic": [0, 0.4, 0.8],
         "revolute1": [0, 0.4, 0.8],
@@ -295,7 +301,7 @@ def animate(
 
         view_matrix = get_camera_parameters_move(i)
         rgb = traj_camera(view_matrix)
-        PIL.Image.fromarray(rgb).save(f"{save_dir}/{i}.png")
+        PIL.Image.fromarray(rgb).save(f"{save_dir}/{i}{postfix}.png")
 
         time.sleep(0.5)
 
@@ -322,8 +328,8 @@ def evaluate(args):
     urdformer_part.load_state_dict(checkpoint["model_state_dict"])
     for img_path in tqdm(glob.glob(input_path + "/*")):
         if img_path in [
-            # "test_data/images/test_StorageFurniture_46655_18.png",
-            # "test_data/images/test_StorageFurniture_46655_19.png"
+            "test_data/images/StorageFurniture_46655_18.png",
+            "test_data/images/StorageFurniture_46655_19.png"
         ]:  # buggy output
             # Error msg: IndexError: list index out of range
             # from: link_names[link_id + 1], link_names[linkparents[link_id]] (line 1685, in write_urdf)
@@ -340,6 +346,7 @@ def evaluate(args):
             device,
             args.random,
         )
+
 
 def collect_html(args):
     html_header = """
@@ -372,7 +379,7 @@ def collect_html(args):
     bbox_dir = "test_data/labels_gt"
     out_dir = args.exp_dir
     html = html_header
-    relative_path = '../../'
+    relative_path = "../../"
 
     file_list = os.listdir(img_dir)
     file_list.sort()
@@ -386,7 +393,8 @@ def collect_html(args):
                         <th>Predicted Bbox</th>
                         <th>Input GT Bbox</th>
                         <th>Output Graph</th>
-                        <th>Output Shape (Animate at 3 States)</th>
+                        <th>Animated Object (template meshes) </th>
+                        <th>Animated Object (random meshes)</th>
                     </tr>
                     <tr>
                         <td style="height: 200px; width: 50px;">{fname}</td>
@@ -399,6 +407,11 @@ def collect_html(args):
                         <img src="{os.path.join(fname, 'visuals/1.png')}" alt="Generated Item" style="height: 200px; width: auto;">
                         <img src="{os.path.join(fname, 'visuals/2.png')}" alt="Generated Item" style="height: 200px; width: auto;">
                         </td>
+                        <td>
+                        <img src="{os.path.join(fname, 'visuals/0_random.png')}" alt="Generated Item" style="height: 200px; width: auto;">
+                        <img src="{os.path.join(fname, 'visuals/1_random.png')}" alt="Generated Item" style="height: 200px; width: auto;">
+                        <img src="{os.path.join(fname, 'visuals/2_random.png')}" alt="Generated Item" style="height: 200px; width: auto;">
+                        </td>
                     </tr>
                     <tr class="separator"><td colspan="3"></td></tr>
                     """
@@ -408,16 +421,15 @@ def collect_html(args):
         f.write(html)
 
 
-
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--image_path", default="test_data/images", type=str)
+    parser.add_argument("--exp_dir", default="exps/freezed", type=str)
     parser.add_argument(
-        "--exp_dir", default="exps/freezed", type=str
-    )
-    parser.add_argument(
-        "--label_dir", default="test_data/labels_gt", type=str,
-        help="directory to the 2D bounding boxes, either test_data/labels_gt or test_data/labels_pred"
+        "--label_dir",
+        default="test_data/labels_gt",
+        type=str,
+        help="directory to the 2D bounding boxes, either test_data/labels_gt or test_data/labels_pred",
     )
     parser.add_argument(
         "--random",
