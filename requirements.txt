@@ -16,3 +16,6 @@ nltk==3.8.1
 chardet
 accelerate
 gdown
+open3d
+pyrender
+numpy-quaternion
