@@ -90,11 +90,10 @@ def evaluate(args, detection_args):
         "************ Applying Finetuned (Model Soup) GroundingDINO *******************"
     )
     detector(args.scene_type, detection_args)
-    # #
     # # # run postprocessing
-    label_dir = "test_data/labels_pred"
+    label_dir = args.pred_save_dir
     save_dir = "test_data/labels_filtered"
-
+    os.makedirs(save_dir, exist_ok=True)
     post_processing(label_dir, input_path, save_dir)
 
 def main():

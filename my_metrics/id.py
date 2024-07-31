@@ -9,6 +9,7 @@ from pytorch3d.ops import sample_points_from_meshes
 from pytorch3d.loss import chamfer_distance
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from my_objects.motions import transform_all_parts
+from my_objects.dict_utils import zero_center_object, rescale_object, compute_overall_bbox_size
 
 def _load_and_combine_plys(dir, ply_files, scale=None, z_rotate=None, translate=None):
     """
@@ -81,6 +82,15 @@ def ID(gen_obj_dict, gen_obj_path, gt_obj_dict, gt_obj_path, num_states=5, num_s
     - score: the metric score, which is the overall average chamfer distance over the states\n
         - The score is in the range of [0, inf), lower is better
     """
+    # Zero center the objects
+    zero_center_object(gen_obj_dict)
+    zero_center_object(gt_obj_dict)
+
+    # Compute the scale factor by comparing the overall bbox size and scale the candidate object as a whole
+    requirement_bbox_size = compute_overall_bbox_size(gen_obj_dict)
+    candidate_bbox_size = compute_overall_bbox_size(gt_obj_dict)
+    scale_factor = requirement_bbox_size / candidate_bbox_size
+    rescale_object(gen_obj_dict, scale_factor)
 
     # Get the number of parts of the two objects
     gen_obj_num_parts = len(gen_obj_dict["diffuse_tree"])
@@ -96,6 +106,7 @@ def ID(gen_obj_dict, gen_obj_path, gt_obj_dict, gt_obj_path, num_states=5, num_s
     gen_obj_part_points = torch.zeros((gen_obj_num_parts, num_samples, 3))
     for i in range(gen_obj_num_parts):
         part_mesh = _load_and_combine_plys(gen_obj_part_ply_paths[i]["dir"], gen_obj_part_ply_paths[i]["files"], 
+                                           scale=scale_factor,
                                            translate=gen_obj_dict["diffuse_tree"][i]["aabb"]["center"])
         gen_obj_part_points[i] = sample_points_from_meshes(part_mesh, num_samples=num_samples).squeeze(0)
 
@@ -129,5 +140,5 @@ def ID(gen_obj_dict, gen_obj_path, gt_obj_dict, gt_obj_path, num_states=5, num_s
 
     # Compute the ID
     score = np.mean(chamfer_distances)
-
-    return score
+    resting_score = chamfer_distances[0]
+    return score, resting_score

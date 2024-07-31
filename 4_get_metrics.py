@@ -31,20 +31,12 @@ if __name__ == "__main__":
     cases.sort()
 
     metrics = {
-        "individual": {
-            "ID": {},
-            "AID": {},
-            "RID": {},
-            "RIDD": {},
-            "AOR": {},
-        },
-        "overall": {
-            "ID": 0,
-            "AID": 0,
-            "RID": 0,
-            "RIDD": 0,
-            "AOR": 0,
-        }
+        "AID-IoU": 0,
+        "RID-IoU": 0,
+        "RID-cDist": 0,
+        "AID-CD": 0,
+        "RID-CD": 0,
+        "AOR": 0,
     }
 
     valid_aor_cnt = 0
@@ -54,40 +46,35 @@ if __name__ == "__main__":
         pred = json.load(open(os.path.join(args.exp_dir, case, "object.json"), "r"))
         gt = json.load(open(os.path.join(args.gt_dir, model_id, "train_v3.json"), "r"))
 
-        rid, ridd = RID(gt, pred, iou_include_base=args.include_base, use_gIoU=True)
-        aid = AID(gt, pred, iou_include_base=args.include_base, use_gIoU=True, compare_handles=True)
-        id = ID(pred, os.path.join(args.exp_dir, case), gt, os.path.join(args.gt_dir, model_id))
+        rid_iou, rid_cdist = RID(gt, pred, iou_include_base=args.include_base, use_gIoU=True)
+        aid_iou = AID(gt, pred, iou_include_base=args.include_base, use_gIoU=True, compare_handles=True)
+        aid_cd, rid_cd = ID(pred, os.path.join(args.exp_dir, case), gt, os.path.join(args.gt_dir, model_id))
         aor = AOR(pred)
 
-        rid = float(rid)
-        ridd = float(ridd)
-        aid = float(aid)
-        id = float(id)
+        rid_cdist = float(rid_cdist)
+        rid_iou = float(rid_iou)
+        aid_iou = float(aid_iou)
+        aid_cd = float(aid_cd)
+        rid_cd = float(rid_cd)
         aor = float(aor)
 
-        metrics["individual"]["AID"][model_id] = aid
-        metrics["individual"]["RID"][model_id] = rid
-        metrics["individual"]["RIDD"][model_id] = ridd
-        metrics["individual"]["ID"][model_id] = id
+        metrics["AID-CD"] += aid_cd
+        metrics["RID-CD"] += rid_cd
+        metrics["AID-IoU"] += aid_iou
+        metrics["RID-IoU"] += rid_iou
+        metrics["RID-cDist"] += rid_cdist
 
-        if aor != -1:
+        if aor != -1: # -1 means the model is invalid
             valid_aor_cnt += 1
-            metrics["individual"]["AOR"][model_id] = aor
-            metrics["overall"]["AOR"] += aor
-        else:
-            metrics["individual"]["AOR"][model_id] = None
-
-        metrics["overall"]["AID"] += aid
-        metrics["overall"]["RID"] += rid
-        metrics["overall"]["RIDD"] += ridd
-        metrics["overall"]["ID"] += id
-    
+            metrics["AOR"] += aor
+        
     num_cases = len(cases)
-    metrics["overall"]["AID"] /= num_cases
-    metrics["overall"]["RID"] /= num_cases
-    metrics["overall"]["RIDD"] /= num_cases
-    metrics["overall"]["ID"] /= num_cases
-    metrics["overall"]["AOR"] /= valid_aor_cnt
+    metrics["AID-CD"] /= num_cases
+    metrics["RID-CD"] /= num_cases
+    metrics["AID-IoU"] /= num_cases
+    metrics["RID-IoU"] /= num_cases
+    metrics["RID-cDist"] /= num_cases
+    metrics["AOR"] /= valid_aor_cnt
 
-    with open('metrics.json', 'w') as f:
+    with open(f'{args.exp_dir}/metrics.json', 'w') as f:
         json.dump(metrics, f)
