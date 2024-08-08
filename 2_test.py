@@ -327,10 +327,21 @@ def evaluate(args):
     checkpoint = torch.load(part_checkpoint)
     urdformer_part.load_state_dict(checkpoint["model_state_dict"])
     for img_path in tqdm(glob.glob(input_path + "/*")):
+        # if img_path in [
+        #     "test_data/images/StorageFurniture_46655_18.png",
+        #     "test_data/images/StorageFurniture_46655_19.png"
+        # ]:  # buggy output for GT bbox input
+        #     # Error msg: IndexError: list index out of range
+        #     # from: link_names[link_id + 1], link_names[linkparents[link_id]] (line 1685, in write_urdf)
+        #     continue
         if img_path in [
-            "test_data/images/StorageFurniture_46655_18.png",
-            "test_data/images/StorageFurniture_46655_19.png"
-        ]:  # buggy output
+            "test_data/images/StorageFurniture_46439_19.png"
+            "test_data/images/StorageFurniture_46896_18.png", # padded_bbox[: len(bbox)] = bbox, could not broadcast input array from shape (0,) into shape (0,4)
+            "test_data/images/StorageFurniture_47168_19.png",
+            "test_data/images/StorageFurniture_46787_19.png",
+            "test_data/images/StorageFurniture_46787_18.png",
+            "test_data/images/StorageFurniture_48023_19.png"
+        ]:  # buggy output for pred bbox input
             # Error msg: IndexError: list index out of range
             # from: link_names[link_id + 1], link_names[linkparents[link_id]] (line 1685, in write_urdf)
             continue
@@ -394,7 +405,6 @@ def collect_html(args):
                         <th>Input GT Bbox</th>
                         <th>Output Graph</th>
                         <th>Animated Object (template meshes) </th>
-                        <th>Animated Object (random meshes)</th>
                     </tr>
                     <tr>
                         <td style="height: 200px; width: 50px;">{fname}</td>
@@ -406,11 +416,6 @@ def collect_html(args):
                         <img src="{os.path.join(fname, 'visuals/0.png')}" alt="Generated Item" style="height: 200px; width: auto;">
                         <img src="{os.path.join(fname, 'visuals/1.png')}" alt="Generated Item" style="height: 200px; width: auto;">
                         <img src="{os.path.join(fname, 'visuals/2.png')}" alt="Generated Item" style="height: 200px; width: auto;">
-                        </td>
-                        <td>
-                        <img src="{os.path.join(fname, 'visuals/0_random.png')}" alt="Generated Item" style="height: 200px; width: auto;">
-                        <img src="{os.path.join(fname, 'visuals/1_random.png')}" alt="Generated Item" style="height: 200px; width: auto;">
-                        <img src="{os.path.join(fname, 'visuals/2_random.png')}" alt="Generated Item" style="height: 200px; width: auto;">
                         </td>
                     </tr>
                     <tr class="separator"><td colspan="3"></td></tr>
@@ -424,10 +429,10 @@ def collect_html(args):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--image_path", default="test_data/images", type=str)
-    parser.add_argument("--exp_dir", default="exps/freezed", type=str)
+    parser.add_argument("--exp_dir", default="exps/freezed_pred", type=str)
     parser.add_argument(
         "--label_dir",
-        default="test_data/labels_gt",
+        default="test_data/labels_filtered",
         type=str,
         help="directory to the 2D bounding boxes, either test_data/labels_gt or test_data/labels_pred",
     )

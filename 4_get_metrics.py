@@ -2,17 +2,17 @@ import os
 import json
 import argparse
 from tqdm import tqdm
-from my_metrics.aid import AID
-from my_metrics.id import ID
-from my_metrics.rid import RID
+from my_metrics.cd import CD
 from my_metrics.aor import AOR
+from my_metrics.iou_cdist import IoU_cDist
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--exp_dir",
         type=str,
-        default="exps/freezed",
+        default="exps/freezed_pred",
         help="The directory of the predicted results",
     )
     parser.add_argument(
@@ -27,12 +27,18 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     cases = os.listdir(args.exp_dir)
-    cases.remove("collect.html")
+    if os.path.exists(f'{args.exp_dir}/collect.html'):
+        cases.remove("collect.html")
+    if os.path.exists(f'{args.exp_dir}/metrics.json'):
+        cases.remove("metrics.json")
     cases.sort()
+
+    include_base = False
 
     metrics = {
         "AID-IoU": 0,
         "RID-IoU": 0,
+        "AID-cDist": 0,
         "RID-cDist": 0,
         "AID-CD": 0,
         "RID-CD": 0,
@@ -40,39 +46,44 @@ if __name__ == "__main__":
     }
 
     valid_aor_cnt = 0
+    i = 0
     for case in tqdm(cases):
         tokens = case.split("_")
         model_id = f"{tokens[0]}/{tokens[1]}"
         pred = json.load(open(os.path.join(args.exp_dir, case, "object.json"), "r"))
         gt = json.load(open(os.path.join(args.gt_dir, model_id, "train_v3.json"), "r"))
 
-        rid_iou, rid_cdist = RID(gt, pred, iou_include_base=args.include_base, use_gIoU=True)
-        aid_iou = AID(gt, pred, iou_include_base=args.include_base, use_gIoU=True, compare_handles=True)
-        aid_cd, rid_cd = ID(pred, os.path.join(args.exp_dir, case), gt, os.path.join(args.gt_dir, model_id))
+        scores = IoU_cDist(pred, gt, compare_handles=True, iou_include_base=include_base)
+        cds = CD(pred, os.path.join(args.exp_dir, case), gt, os.path.join(args.gt_dir, model_id), include_base=include_base)
         aor = AOR(pred)
 
-        rid_cdist = float(rid_cdist)
-        rid_iou = float(rid_iou)
-        aid_iou = float(aid_iou)
-        aid_cd = float(aid_cd)
-        rid_cd = float(rid_cd)
-        aor = float(aor)
+        aid_cdist = scores['AID-cDist']
+        rid_cdist = scores['RID-cDist']
+        aid_iou = scores['AID-IoU']
+        rid_iou = scores['RID-IoU']
+        aid_cd = cds['AID-CD']
+        rid_cd = cds['RID-CD']
+
 
         metrics["AID-CD"] += aid_cd
         metrics["RID-CD"] += rid_cd
         metrics["AID-IoU"] += aid_iou
         metrics["RID-IoU"] += rid_iou
+        metrics["AID-cDist"] += aid_cdist
         metrics["RID-cDist"] += rid_cdist
 
-        if aor != -1: # -1 means the model is invalid
+
+        if aor != -1: # -1 means the model is invalid for evaluating AOR
             valid_aor_cnt += 1
             metrics["AOR"] += aor
+        i += 1
         
     num_cases = len(cases)
     metrics["AID-CD"] /= num_cases
     metrics["RID-CD"] /= num_cases
     metrics["AID-IoU"] /= num_cases
     metrics["RID-IoU"] /= num_cases
+    metrics["AID-cDist"] /= num_cases
     metrics["RID-cDist"] /= num_cases
     metrics["AOR"] /= valid_aor_cnt
 

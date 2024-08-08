@@ -111,3 +111,30 @@ def sampling_giou(
     giou = iou - (cbbox_volume * num_samples - union) / (cbbox_volume * num_samples) if cbbox_volume > 0 else iou
 
     return giou
+
+
+def sampling_cDist(
+    part1,
+    part2,
+    bbox1_transformations,
+    bbox2_transformations,
+):
+    '''
+    Compute the centroid distance between two bounding boxes\n
+    - bbox1_vertices: the vertices of the first bounding box\n
+    - bbox2_vertices: the vertices of the second bounding box\n
+    - bbox1_transformations: list of transformations applied to the first bounding box\n
+    - bbox2_transformations: list of transformations applied to the second bounding box\n
+    '''
+    
+    bbox1_centroid = np.array(part1['aabb']['center'], dtype=np.float32).reshape(1, 3)
+    bbox2_centroid = np.array(part2['aabb']['center'], dtype=np.float32).reshape(1, 3)
+
+    # Transform the centroids
+    bbox1_transformed_centroids = _apply_forward_transformations(bbox1_centroid, bbox1_transformations)
+    bbox2_transformed_centroids = _apply_forward_transformations(bbox2_centroid, bbox2_transformations)
+
+    # Compute the centroid distance
+    cDist = np.linalg.norm(bbox1_transformed_centroids - bbox2_transformed_centroids)
+
+    return cDist

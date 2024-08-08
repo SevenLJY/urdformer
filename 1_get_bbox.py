@@ -67,6 +67,7 @@ def normalize_bbox(bboxes, w=224, h=224):
 def prepare_gt_bbox(args):
     input_path = args.image_path
     manual_dir = "test_data/labels_gt"
+    os.makedirs(manual_dir, exist_ok=True)
     for f in tqdm(os.listdir(input_path)):
         if f.endswith(".png"):
             data = {}
@@ -113,8 +114,8 @@ def main():
         args
     )  # leave the defult groundingDINO argument unchanged
 
-    # prepare_gt_bbox(args)
-    evaluate(args, detection_args)
+    prepare_gt_bbox(args)
+    # evaluate(args, detection_args)
 
 
 if __name__ == "__main__":
