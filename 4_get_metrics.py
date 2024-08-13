@@ -1,18 +1,28 @@
 import os
 import json
 import argparse
+import networkx as nx
 from tqdm import tqdm
 from my_metrics.cd import CD
 from my_metrics.aor import AOR
 from my_metrics.iou_cdist import IoU_cDist
 
+def get_hash(file, dag=True):
+    tree = file["diffuse_tree"]
+    G = nx.DiGraph() if dag else nx.Graph()
+    for node in tree:
+        G.add_node(node["id"])
+        if node["parent"] != -1:
+            G.add_edge(node["id"], node["parent"])
+    hashcode = nx.weisfeiler_lehman_graph_hash(G)
+    return hashcode
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--exp_dir",
         type=str,
-        default="exps/freezed_pred",
+        default="exps/freezed",
         help="The directory of the predicted results",
     )
     parser.add_argument(
@@ -43,6 +53,7 @@ if __name__ == "__main__":
         "AID-CD": 0,
         "RID-CD": 0,
         "AOR": 0,
+        "graph_acc": 0
     }
 
     valid_aor_cnt = 0
@@ -52,6 +63,11 @@ if __name__ == "__main__":
         model_id = f"{tokens[0]}/{tokens[1]}"
         pred = json.load(open(os.path.join(args.exp_dir, case, "object.json"), "r"))
         gt = json.load(open(os.path.join(args.gt_dir, model_id, "train_v3.json"), "r"))
+
+        hash_pred = get_hash(pred)
+        hash_gt = get_hash(gt)
+        if hash_pred == hash_gt:
+            metrics["graph_acc"] += 1
 
         scores = IoU_cDist(pred, gt, compare_handles=True, iou_include_base=include_base)
         cds = CD(pred, os.path.join(args.exp_dir, case), gt, os.path.join(args.gt_dir, model_id), include_base=include_base)
@@ -86,6 +102,7 @@ if __name__ == "__main__":
     metrics["AID-cDist"] /= num_cases
     metrics["RID-cDist"] /= num_cases
     metrics["AOR"] /= valid_aor_cnt
+    metrics["graph_acc"] /= num_cases
 
     with open(f'{args.exp_dir}/metrics.json', 'w') as f:
         json.dump(metrics, f)
