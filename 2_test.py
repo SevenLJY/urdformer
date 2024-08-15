@@ -108,6 +108,7 @@ def image_transform():
 
 
 def evaluate_parts_with_masks(data_path, cropped_image):
+    is_valid = True
     max_bbox = 32
     num_roots = 1
     data = np.load(data_path, allow_pickle=True).item()
@@ -122,6 +123,18 @@ def evaluate_parts_with_masks(data_path, cropped_image):
         bbox.append(each_bbox)
         resized = np.zeros((14, 14))
         resized_mask.append(resized)
+    
+    if len(bbox) == 0:
+        is_valid = False
+        return (
+        None,
+        None,
+        None,
+        None,
+        None,
+        is_valid
+    )
+    
     padded_bbox = np.zeros((max_bbox, 4))
     padded_bbox[: len(bbox)] = bbox
 
@@ -142,6 +155,7 @@ def evaluate_parts_with_masks(data_path, cropped_image):
         np.array([padded_masks]),
         tgt_padding_mask,
         tgt_padding_relation_mask,
+        is_valid
     )
 
 
@@ -172,12 +186,6 @@ def object_prediction(
     device,
     if_random=False,
 ):
-
-    parent_pred_parts = []
-    position_pred_end_parts = []
-    position_pred_start_parts = []
-    mesh_pred_parts = []
-    base_types = []
     test_name = os.path.basename(img_path)[:-4]
 
     output_dir = f"{exp_dir}/{test_name}"
@@ -193,7 +201,10 @@ def object_prediction(
         masks_part,
         tgt_padding_mask_part,
         tgt_padding_relation_mask_part,
+        is_valid
     ) = evaluate_parts_with_masks(f"{label_dir}/{test_name}.npy", image)
+    if not is_valid:
+        return
 
     (
         position_pred_part,
@@ -334,17 +345,17 @@ def evaluate(args):
         #     # Error msg: IndexError: list index out of range
         #     # from: link_names[link_id + 1], link_names[linkparents[link_id]] (line 1685, in write_urdf)
         #     continue
-        if img_path in [
-            "test_data/images/StorageFurniture_46439_19.png"
-            "test_data/images/StorageFurniture_46896_18.png", # padded_bbox[: len(bbox)] = bbox, could not broadcast input array from shape (0,) into shape (0,4)
-            "test_data/images/StorageFurniture_47168_19.png",
-            "test_data/images/StorageFurniture_46787_19.png",
-            "test_data/images/StorageFurniture_46787_18.png",
-            "test_data/images/StorageFurniture_48023_19.png"
-        ]:  # buggy output for pred bbox input
-            # Error msg: IndexError: list index out of range
-            # from: link_names[link_id + 1], link_names[linkparents[link_id]] (line 1685, in write_urdf)
-            continue
+        # if img_path in [
+        #     "test_data/images/StorageFurniture_46439_19.png"
+        #     "test_data/images/StorageFurniture_46896_18.png", # padded_bbox[: len(bbox)] = bbox, could not broadcast input array from shape (0,) into shape (0,4)
+        #     "test_data/images/StorageFurniture_47168_19.png",
+        #     "test_data/images/StorageFurniture_46787_19.png",
+        #     "test_data/images/StorageFurniture_46787_18.png",
+        #     "test_data/images/StorageFurniture_48023_19.png"
+        # ]:  # buggy output for pred bbox input
+        #     # Error msg: IndexError: list index out of range
+        #     # from: link_names[link_id + 1], link_names[linkparents[link_id]] (line 1685, in write_urdf)
+        #     continue
         if os.path.exists(f"{exp_dir}/{os.path.basename(img_path)[:-4]}"):
             continue
         print(f"Processing {img_path}...")
