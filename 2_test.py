@@ -331,31 +331,13 @@ def evaluate(args):
     )
 
     ########################  URDFormer Core  ##############################
-    num_relations = 6  # the dimension of the relationship embedding
+    num_relations = 6  # the number of relations between the object and the scene
     urdformer_part = URDFormer(num_relations=num_relations, num_roots=1)
     urdformer_part = urdformer_part.to(device)
     part_checkpoint = "checkpoints/part.pth"
     checkpoint = torch.load(part_checkpoint)
     urdformer_part.load_state_dict(checkpoint["model_state_dict"])
     for img_path in tqdm(glob.glob(input_path + "/*")):
-        # if img_path in [
-        #     "test_data/images/StorageFurniture_46655_18.png",
-        #     "test_data/images/StorageFurniture_46655_19.png"
-        # ]:  # buggy output for GT bbox input
-        #     # Error msg: IndexError: list index out of range
-        #     # from: link_names[link_id + 1], link_names[linkparents[link_id]] (line 1685, in write_urdf)
-        #     continue
-        # if img_path in [
-        #     "test_data/images/StorageFurniture_46439_19.png"
-        #     "test_data/images/StorageFurniture_46896_18.png", # padded_bbox[: len(bbox)] = bbox, could not broadcast input array from shape (0,) into shape (0,4)
-        #     "test_data/images/StorageFurniture_47168_19.png",
-        #     "test_data/images/StorageFurniture_46787_19.png",
-        #     "test_data/images/StorageFurniture_46787_18.png",
-        #     "test_data/images/StorageFurniture_48023_19.png"
-        # ]:  # buggy output for pred bbox input
-        #     # Error msg: IndexError: list index out of range
-        #     # from: link_names[link_id + 1], link_names[linkparents[link_id]] (line 1685, in write_urdf)
-        #     continue
         if os.path.exists(f"{exp_dir}/{os.path.basename(img_path)[:-4]}"):
             continue
         print(f"Processing {img_path}...")
