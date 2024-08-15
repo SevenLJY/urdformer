@@ -16,6 +16,7 @@ from argparse import ArgumentParser
 import networkx as nx
 import matplotlib.pyplot as plt
 from io import BytesIO
+from copy import copy
 
 # np.random.seed(777) #77, 777, 24
 # ref_colors = np.random.uniform(low=0.6, high=0.9, size=(32, 3))
@@ -615,8 +616,8 @@ def my_visualization_parts(
             each_parent = np.unravel_index(np.argmax(each_parent), each_parent.shape)
             parent_id = each_parent[0]
             # [EDIT by ljy] if invalid parent prediction
-            if parent_id >= num_parts:
-                parent_id = 0
+            # if parent_id > num_parts:
+            #     parent_id = 0
             #########################################
             parent_pred.append(parent_id)
             relations_pred.append(each_parent[1])
@@ -637,11 +638,28 @@ def my_visualization_parts(
         if len(texture_list) > 0:
             texture_list = [texture_list[i] for i in new_order]
 
-        # update parent labels
-        for p_i, each_parent in enumerate(parent_pred):
-            if each_parent > 0:
-                if each_parent - 1 in list(new_order):
-                    parent_pred[p_i] = list(new_order).index(each_parent - 1) + 1
+        # [COMMENT by Jiayi] this update cause index error when the original parent_id is [1,0]
+        # # update parent labels
+        # for p_i, each_parent in enumerate(parent_pred):
+        #     if each_parent > 0:
+        #         if each_parent - 1 in list(new_order):
+        #             parent_pred[p_i] = list(new_order).index(each_parent - 1) + 1
+        
+        # [EDIT by Jiayi] this version fixes the index error
+        def rank_list(src):
+            '''Assume the src list is in ascending order'''
+            # Rank the elements in the list
+            unique_sorted_lst = sorted(set(src))
+            # Create a dictionary that maps each element to its rank
+            rank_dict = {val: idx for idx, val in enumerate(unique_sorted_lst)}
+            # Replace each element in the original list with its rank
+            ranked_list = [rank_dict[val] for val in src]
+            return ranked_list
+        
+        # rank the parent_pred
+        parent_pred = rank_list(copy(parent_pred))
+
+
 
         parents = {}
         children = {}
@@ -1078,10 +1096,6 @@ def visualization_parts(
         for i, each_parent in enumerate(parent_pred_ori[num_roots:]):
             each_parent = np.unravel_index(np.argmax(each_parent), each_parent.shape)
             parent_id = each_parent[0]
-            # # [EDIT by ljy] if invalid parent prediction
-            # if parent_id >= num_parts:
-            #     parent_id = 0
-            #########################################
             parent_pred.append(parent_id)
             relations_pred.append(each_parent[1])
 
