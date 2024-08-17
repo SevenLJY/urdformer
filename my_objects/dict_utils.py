@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.optimize import linear_sum_assignment
 
 
 def get_base_part_idx(obj_dict):
@@ -251,9 +252,10 @@ def hungarian_matching(obj1_dict, obj2_dict):
     - obj2_dict: the second object dictionary\n
 
     Return:\n
-    - mapping: the mapping from the first object to the second object in the form: [[obj_part_idx], ...]
+    - mapping: the mapping from the first object to the second object in the form: [obj_part_idx, cost]
     """
-    INF = 999999
+    INF = 9999999
+
     tree1 = obj1_dict["diffuse_tree"]
     tree2 = obj2_dict["diffuse_tree"]
 
@@ -271,23 +273,27 @@ def hungarian_matching(obj1_dict, obj2_dict):
             )
 
     # Find the correspondences using the Hungarian algorithm
-    from scipy.optimize import linear_sum_assignment
-
     row_ind, col_ind = linear_sum_assignment(cost_matrix)
 
-    # Remove the correspondences with infinite cost
+    # Valid correspondences are those with all cost less than INF
     valid_correspondences = np.where(cost_matrix[row_ind, col_ind] < INF)[0]
-    row_ind = row_ind[valid_correspondences]
-    col_ind = col_ind[valid_correspondences]
+    invalid_correspondences = np.where(np.logical_not(cost_matrix[row_ind, col_ind] < INF))[0]
+
+    row_i = row_ind[valid_correspondences]
+    col_i = col_ind[valid_correspondences]
 
     # Construct the mapping
     mapping = np.zeros(
         (n_parts1, 2), dtype=np.float32
     ) 
-    mapping[row_ind, 0] = col_ind
+    mapping[row_i, 0] = col_i
+    mapping[row_i, 1] = cost_matrix[row_i, col_i]
 
-    # Compute the minimum cost
-    min_cost = cost_matrix[row_ind[row_ind < n_parts1], col_ind[col_ind < n_parts2]]
-    mapping[row_ind, 1] = min_cost
+    # assign the index of the most closely matched part
+    if n_parts1 > n_parts2: 
+        row_j = row_ind[invalid_correspondences]
+        col_j = cost_matrix[row_j, :].argmin(axis=1)
+        mapping[row_j, 0] = col_j
+        mapping[row_j, 1] = cost_matrix[row_j, col_j]
 
     return mapping

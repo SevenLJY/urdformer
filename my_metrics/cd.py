@@ -125,6 +125,47 @@ def _compute_chamfer_distance(
     return distance
 
 
+def _get_scores(
+    src_dict,
+    tgt_dict,
+    original_src_part_points,
+    original_tgt_part_points,
+    part_mapping,
+    num_states,
+    include_base,
+    src_base_idx,
+):
+
+    chamfer_distances = np.zeros(num_states, dtype=np.float32)
+    joint_states = np.linspace(0, 1, num_states)
+    for state_idx, state in enumerate(joint_states):
+
+        # Reset the part point clouds
+        src_part_points = deepcopy(original_src_part_points)
+        tgt_part_points = deepcopy(original_tgt_part_points)
+
+        # Transform the part point clouds to the current state using the joints
+        transform_all_parts(src_part_points.numpy(), src_dict, state, dry_run=False)
+        transform_all_parts(tgt_part_points.numpy(), tgt_dict, state, dry_run=False)
+
+        # Compute the chamfer distance between the two objects
+        chamfer_distances[state_idx] = _compute_chamfer_distance(
+            src_part_points,
+            tgt_part_points,
+            part_mapping=part_mapping,
+            exclude_id=-1 if include_base else src_base_idx,
+        )
+
+    # Compute the ID
+    aid_cd = np.mean(chamfer_distances)
+    rid_cd = chamfer_distances[0]
+
+    return {
+        "AS-CD": float(aid_cd),
+        "RS-CD": float(rid_cd),
+    }
+
+
 def CD(
     gen_obj_dict,
     gen_obj_path,
@@ -152,99 +193,99 @@ def CD(
         - The score is in the range of [0, inf), lower is better
     """
     # Make copies of the dictionaries to avoid modifying the original dictionaries
-    gen_obj_dict = deepcopy(gen_obj_dict)
-    gt_obj_dict = deepcopy(gt_obj_dict)
+    gen_dict = deepcopy(gen_obj_dict)
+    gt_dict = deepcopy(gt_obj_dict)
 
     # Zero center the objects
-    zero_center_object(gen_obj_dict)
-    zero_center_object(gt_obj_dict)
+    zero_center_object(gen_dict)
+    zero_center_object(gt_dict)
 
     # Compute the scale factor by comparing the overall bbox size and scale the candidate object as a whole
-    requirement_bbox_size = compute_overall_bbox_size(gen_obj_dict)
-    candidate_bbox_size = compute_overall_bbox_size(gt_obj_dict)
-    scale_factor = requirement_bbox_size / candidate_bbox_size
+    gen_bbox_size = compute_overall_bbox_size(gen_dict)
+    gt_bbox_size = compute_overall_bbox_size(gt_dict)
+    scale_factor = gen_bbox_size / gt_bbox_size
     rescale_object(gen_obj_dict, scale_factor)
 
     # Record the indices of the base parts of the two objects
-    requirement_base_idx = get_base_part_idx(gen_obj_dict)
-    candidate_base_idx = get_base_part_idx(gt_obj_dict)
+    gen_base_idx = get_base_part_idx(gen_dict)
+    gt_base_idx = get_base_part_idx(gt_dict)
 
     # Find mapping between the parts of the two objects based on closest bbox centers
-    part_mapping = find_part_mapping(gen_obj_dict, gt_obj_dict, use_hungarian=True)
-    # Force the base parts to be mapped to each other
-    part_mapping[requirement_base_idx, :] = [candidate_base_idx, 0]
+    mapping_gen2gt = find_part_mapping(gen_dict, gt_dict, use_hungarian=True)
+    mapping_gt2gen = find_part_mapping(gt_dict, gen_dict, use_hungarian=True)
 
     # Get the number of parts of the two objects
-    gen_obj_num_parts = len(gen_obj_dict["diffuse_tree"])
-    gt_obj_num_parts = len(gt_obj_dict["diffuse_tree"])
+    gen_tree = gen_dict["diffuse_tree"]
+    gt_tree = gt_dict["diffuse_tree"]
+    gen_num_parts = len(gen_tree)
+    gt_num_parts = len(gt_tree)
 
     # Get the paths of the ply files of the two objects
-    gen_obj_part_ply_paths = [
-        {"dir": gen_obj_path, "files": gen_obj_dict["diffuse_tree"][i]["plys"]}
-        for i in range(gen_obj_num_parts)
+    gen_part_ply_paths = [
+        {"dir": gen_obj_path, "files": gen_tree[i]["plys"]}
+        for i in range(gen_num_parts)
     ]
-    gt_obj_part_ply_paths = [
-        {"dir": gt_obj_path, "files": gt_obj_dict["diffuse_tree"][i]["plys"]}
-        for i in range(gt_obj_num_parts)
+    gt_part_ply_paths = [
+        {"dir": gt_obj_path, "files": gt_tree[i]["plys"]}
+        for i in range(gt_num_parts)
     ]
 
     # Load the ply files of the two objects and sample points from them
-    gen_obj_part_points = torch.zeros((gen_obj_num_parts, num_samples, 3), dtype=torch.float32)
-    for i in range(gen_obj_num_parts):
+    gen_part_points = torch.zeros(
+        (gen_num_parts, num_samples, 3), dtype=torch.float32
+    )
+    for i in range(gen_num_parts):
         part_mesh = _load_and_combine_plys(
-            gen_obj_part_ply_paths[i]["dir"],
-            gen_obj_part_ply_paths[i]["files"],
+            gen_part_ply_paths[i]["dir"],
+            gen_part_ply_paths[i]["files"],
             scale=scale_factor,
-            translate=gen_obj_dict["diffuse_tree"][i]["aabb"]["center"],
+            translate=gen_tree[i]["aabb"]["center"],
         )
-        gen_obj_part_points[i] = sample_points_from_meshes(
+        gen_part_points[i] = sample_points_from_meshes(
             part_mesh, num_samples=num_samples
         ).squeeze(0)
 
-    gt_obj_part_points = torch.zeros((gt_obj_num_parts, num_samples, 3), dtype=torch.float32)
-    for i in range(gt_obj_num_parts):
+    gt_part_points = torch.zeros(
+        (gt_num_parts, num_samples, 3), dtype=torch.float32
+    )
+    for i in range(gt_num_parts):
         part_mesh = _load_and_combine_plys(
-            gt_obj_part_ply_paths[i]["dir"],
-            gt_obj_part_ply_paths[i]["files"],
-            translate=gt_obj_dict["diffuse_tree"][i]["aabb"]["center"],
+            gt_part_ply_paths[i]["dir"],
+            gt_part_ply_paths[i]["files"],
+            translate=gt_tree[i]["aabb"]["center"],
         )
-        gt_obj_part_points[i] = sample_points_from_meshes(
+        gt_part_points[i] = sample_points_from_meshes(
             part_mesh, num_samples=num_samples
         ).squeeze(0)
 
-    original_gen_obj_part_points = deepcopy(gen_obj_part_points)
-    original_gt_obj_part_points = deepcopy(gt_obj_part_points)
+    original_gen_part_points = deepcopy(gen_part_points)
+    original_gt_part_points = deepcopy(gt_part_points)
 
-    chamfer_distances = np.zeros(num_states, dtype=np.float32)
-    joint_states = np.linspace(0, 1, num_states)
-    for state_idx, state in enumerate(joint_states):
+    cd_gen2gt = _get_scores(
+        gen_dict,
+        gt_dict,
+        original_gen_part_points,
+        original_gt_part_points,
+        mapping_gen2gt,
+        num_states,
+        include_base,
+        gen_base_idx,
+    )
 
-        # Reset the part point clouds
-        gen_obj_part_points = deepcopy(original_gen_obj_part_points)
-        gt_obj_part_points = deepcopy(original_gt_obj_part_points)
+    cd_gt2gen = _get_scores(
+        gt_dict,
+        gen_dict,
+        original_gt_part_points,
+        original_gen_part_points,
+        mapping_gt2gen,
+        num_states,
+        include_base,
+        gt_base_idx,
+    )
 
-        # Transform the part point clouds to the current state using the joints
-        transform_all_parts(
-            gen_obj_part_points.numpy(), gen_obj_dict, state, dry_run=False
-        )
-        transform_all_parts(
-            gt_obj_part_points.numpy(), gt_obj_dict, state, dry_run=False
-        )
-
-        # Compute the chamfer distance between the two objects
-        chamfer_distances[state_idx] = _compute_chamfer_distance(
-            gen_obj_part_points,
-            gt_obj_part_points,
-            part_mapping=part_mapping,
-            exclude_id=-1 if include_base else requirement_base_idx,
-        )
-
-    # Compute the ID
-    aid_cd = np.mean(chamfer_distances)
-    rid_cd = chamfer_distances[0]
     return {
-        "AID-CD": float(aid_cd),
-        "RID-CD": float(rid_cd),
+        "AS-CD": (cd_gen2gt["AS-CD"] + cd_gt2gen["AS-CD"]) / 2,
+        "RS-CD": (cd_gen2gt["RS-CD"] + cd_gt2gen["RS-CD"]) / 2,
     }
 
 
@@ -262,14 +303,14 @@ if __name__ == "__main__":
     ) as f:
         res = json.load(f)
 
-    aid_cd, rid_cd = CD(
+    cd = CD(
         res,
         "exps/B9/l8h4_l4_aug3d/images/test/epoch_099/15_25144/0",
         gt,
         "/localhome/jla861/Documents/projects/im-gen-ao/data/Table/25144",
         include_base=False,
     )
-    # aid_cd, rid_cd = ID(gt,"/localhome/jla861/Documents/projects/im-gen-ao/data/Table/25144", gt, "/localhome/jla861/Documents/projects/im-gen-ao/data/Table/25144")
-
+    aid_cd = cd["AS-CD"]
+    rid_cd = cd["RS-CD"]
     print(aid_cd)
     print(rid_cd)

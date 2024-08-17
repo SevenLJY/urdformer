@@ -22,7 +22,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--exp_dir",
         type=str,
-        default="exps/freezed",
+        default="exps/freezed_gt",
         help="The directory of the predicted results",
     )
     parser.add_argument(
@@ -46,12 +46,12 @@ if __name__ == "__main__":
     include_base = False
 
     metrics = {
-        "AID-IoU": 0,
-        "RID-IoU": 0,
-        "AID-cDist": 0,
-        "RID-cDist": 0,
-        "AID-CD": 0,
-        "RID-CD": 0,
+        "AS-IoU": 0,
+        "RS-IoU": 0,
+        "AS-cDist": 0,
+        "RS-cDist": 0,
+        "AS-CD": 0,
+        "RS-CD": 0,
         "AOR": 0,
         "graph_acc": 0
     }
@@ -73,20 +73,20 @@ if __name__ == "__main__":
         cds = CD(pred, os.path.join(args.exp_dir, case), gt, os.path.join(args.gt_dir, model_id), include_base=include_base)
         aor = AOR(pred)
 
-        aid_cdist = scores['AID-cDist']
-        rid_cdist = scores['RID-cDist']
-        aid_iou = scores['AID-IoU']
-        rid_iou = scores['RID-IoU']
-        aid_cd = cds['AID-CD']
-        rid_cd = cds['RID-CD']
+        aid_cdist = scores['AS-cDist']
+        rid_cdist = scores['RS-cDist']
+        aid_iou = scores['AS-IoU']
+        rid_iou = scores['RS-IoU']
+        aid_cd = cds['AS-CD']
+        rid_cd = cds['RS-CD']
 
 
-        metrics["AID-CD"] += aid_cd
-        metrics["RID-CD"] += rid_cd
-        metrics["AID-IoU"] += aid_iou
-        metrics["RID-IoU"] += rid_iou
-        metrics["AID-cDist"] += aid_cdist
-        metrics["RID-cDist"] += rid_cdist
+        metrics["AS-CD"] += aid_cd
+        metrics["RS-CD"] += rid_cd
+        metrics["AS-IoU"] += aid_iou
+        metrics["RS-IoU"] += rid_iou
+        metrics["AS-cDist"] += aid_cdist
+        metrics["RS-cDist"] += rid_cdist
 
 
         if aor != -1: # -1 means the model is invalid for evaluating AOR
@@ -95,12 +95,12 @@ if __name__ == "__main__":
         i += 1
         
     num_cases = len(cases)
-    metrics["AID-CD"] /= num_cases
-    metrics["RID-CD"] /= num_cases
-    metrics["AID-IoU"] /= num_cases
-    metrics["RID-IoU"] /= num_cases
-    metrics["AID-cDist"] /= num_cases
-    metrics["RID-cDist"] /= num_cases
+    metrics["AS-CD"] /= num_cases
+    metrics["RS-CD"] /= num_cases
+    metrics["AS-IoU"] /= num_cases
+    metrics["RS-IoU"] /= num_cases
+    metrics["AS-cDist"] /= num_cases
+    metrics["RS-cDist"] /= num_cases
     metrics["AOR"] /= valid_aor_cnt
     metrics["graph_acc"] /= num_cases
 
