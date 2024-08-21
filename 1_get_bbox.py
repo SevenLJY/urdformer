@@ -40,14 +40,13 @@ def get_part_bbox(model_id, img_id):
             ## get the bounding box of the segmented region
             # Find the indices of the True values
             true_indices = np.argwhere(seg_part)
-            if len(true_indices) == 0:
-                continue
-            # Determine the bounding box coordinates
-            min_row, min_col = true_indices.min(axis=0)
-            max_row, max_col = true_indices.max(axis=0)
-            # Create the bounding box coordinates
-            bounding_box = [min_row, min_col, max_row, max_col]
-            bboxes.append(bounding_box)
+            if len(true_indices) > 0:
+                # Determine the bounding box coordinates
+                min_row, min_col = true_indices.min(axis=0)
+                max_row, max_col = true_indices.max(axis=0)
+                # Create the bounding box coordinates
+                bounding_box = [min_row, min_col, max_row, max_col]
+                bboxes.append(bounding_box)
         inst_id += 1
 
     return bboxes
@@ -115,7 +114,7 @@ def main():
     )  # leave the defult groundingDINO argument unchanged
 
     prepare_gt_bbox(args)
-    # evaluate(args, detection_args)
+    evaluate(args, detection_args)
 
 
 if __name__ == "__main__":
