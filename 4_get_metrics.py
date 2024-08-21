@@ -28,11 +28,6 @@ if __name__ == "__main__":
     parser.add_argument(
         "--gt_dir", type=str, default="../data", help="The directory of the GT data"
     )
-    parser.add_argument(
-        "--include_base",
-        action="store_true",
-        help="Whether to include the base part when computing IoU",
-    )
 
     args = parser.parse_args()
 
@@ -69,8 +64,8 @@ if __name__ == "__main__":
         if hash_pred == hash_gt:
             metrics["graph_acc"] += 1
 
-        scores = IoU_cDist(pred, gt, compare_handles=True, iou_include_base=include_base)
-        cds = CD(pred, os.path.join(args.exp_dir, case), gt, os.path.join(args.gt_dir, model_id), include_base=include_base)
+        scores = IoU_cDist(pred, gt, compare_handles=True, iou_include_base=True)
+        cds = CD(pred, os.path.join(args.exp_dir, case), gt, os.path.join(args.gt_dir, model_id), include_base=True)
         aor = AOR(pred)
 
         aid_cdist = scores['AS-cDist']

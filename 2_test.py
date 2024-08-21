@@ -187,12 +187,6 @@ def object_prediction(
     if_random=False,
 ):
     test_name = os.path.basename(img_path)[:-4]
-
-    output_dir = f"{exp_dir}/{test_name}"
-    os.makedirs(output_dir, exist_ok=True)
-    save_visuals_dir = f"{output_dir}/visuals"
-    os.makedirs(save_visuals_dir, exist_ok=True)
-
     image = np.array(PIL.Image.open(img_path).convert("RGB"))
 
     (
@@ -204,6 +198,7 @@ def object_prediction(
         is_valid
     ) = evaluate_parts_with_masks(f"{label_dir}/{test_name}.npy", image)
     if not is_valid:
+        print(f"Skipping {img_path} due to invalid bbox input...")
         return
 
     (
@@ -235,14 +230,11 @@ def object_prediction(
         root_scale[2] *= 2
 
     scale_pred_part[:, 2] *= root_scale[2]
-
-    ##################################################
-    # These are never used
-    # parent_pred_parts.append(np.array(parent_pred_part))
-    # position_pred_end_parts.append(np.array(position_pred_end_part[:, 1:]))
-    # position_pred_start_parts.append(np.array(position_pred_part[:, 1:]))
-    # mesh_pred_parts.append(np.array(mesh_pred_part))
-    # base_types.append(base_pred[0])
+    
+    output_dir = f"{exp_dir}/{test_name}"
+    os.makedirs(output_dir, exist_ok=True)
+    save_visuals_dir = f"{output_dir}/visuals"
+    os.makedirs(save_visuals_dir, exist_ok=True)
 
     # save the urdf file
     post = '_random' if if_random else ''
