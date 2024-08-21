@@ -130,7 +130,7 @@ def IoU_cDist(
     gt_obj_dict,
     num_states=5,
     compare_handles=False,
-    iou_include_base=False,
+    iou_include_base=True,
     rotation_fix_range=True,
     num_samples=10000,
 ):
@@ -169,7 +169,7 @@ def IoU_cDist(
     # scale the generated object as a whole to match the size of the gt object
     gen_bbox_size = compute_overall_bbox_size(gen_dict)
     gt_bbox_size = compute_overall_bbox_size(gt_dict)
-    scale_factor = gen_bbox_size / gt_bbox_size
+    scale_factor = gt_bbox_size / gen_bbox_size
     rescale_object(gen_dict, scale_factor)
 
     mapping_gen2gt = find_part_mapping(gen_dict, gt_dict, use_hungarian=True)
