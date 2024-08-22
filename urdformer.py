@@ -1,15 +1,18 @@
+import math
+from typing import Optional, Tuple, Type
+
+import numpy as np
+import PIL
+import pytorch_lightning as pl
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torchvision.models as models
-from typing import Optional, Tuple, Type
 import torchvision
-import numpy as np
-import PIL
-from vit import vit_s16, vit_b16, vit_l16, vit_scratch16, vit_scratch_base16
-from torchvision.ops import box_convert
+import torchvision.models as models
 import torchvision.transforms as transforms
-import math
+from torchvision.ops import box_convert
+from vit import vit_b16, vit_l16, vit_s16, vit_scratch16, vit_scratch_base16
+
 
 class MLPBlock(nn.Module):
     def __init__(
@@ -87,7 +90,7 @@ class LayerNorm2d(nn.Module):
 
 
 
-class URDFormer(nn.Module):
+class URDFormer(pl.LightningModule):
     def __init__(
         self,
         img_size: int = 1024,
@@ -100,7 +103,8 @@ class URDFormer(nn.Module):
         num_relations: int= 2,
         num_roots: int = 5,
         backbone_mode: int = 0,
-        mesh_num: int=8
+        mesh_num: int=8,
+        optimizer_cfg: dict = {"lr": 1e-4, "weight_decay": 0.05, "eps": 1e-8, "betas": (0.9, 0.999)},
     ) -> None:
         super().__init__()
         self.img_size = img_size
@@ -110,6 +114,8 @@ class URDFormer(nn.Module):
         self.vit_hidden_size = 384
         self.num_roots = num_roots
         self.num_relations = num_relations
+
+        self.optimizer_cfg = optimizer_cfg
 
         ############# use pretrained MAE ########
         self.img_backbone, gap_dim = vit_s16(pretrained="backbones/mae_pretrain_hoi_vit_small.pth", img_size=224)
@@ -218,7 +224,7 @@ class URDFormer(nn.Module):
             )
             self.blocks.append(block)
 
-    def forward(self, img, bbox, mask, ablation_mode):
+    def forward(self, img, bbox, mask, ablation_mode=0):
         img_feature = self.img_backbone(img).view(-1, 14, 14, self.vit_hidden_size).permute(0, 3, 1, 2)
         bbox1 = (bbox * img.shape[-1]).int()
         bbox1[:, :, :, 2] = bbox1[:, :, :,  2] + bbox1[:, :, :,  0]
@@ -249,7 +255,7 @@ class URDFormer(nn.Module):
         img_feature = self.img_fc2(img_feature.view(img.shape[0], -1))
         base_mesh_type = self.base_mesh_head(img_feature)
 
-        x= self.norm_layer(x)
+        x = self.norm_layer(x)
         position_x = self.position_head_x(x)
         position_y = self.position_head_y(x)
         position_z = self.position_head_z(x)
@@ -262,8 +268,7 @@ class URDFormer(nn.Module):
 
         B, max_mask, feature_size = x.shape
 
-
-        # prediting relationship
+        # predicting relationship
         # concatenate the embedding of roots into x.
         roots_embeddings = self.embedding(torch.arange(self.num_roots, device="cuda").unsqueeze(0).expand(B, -1))
         x = torch.cat([self.norm_layer1(roots_embeddings), self.norm_layer1(x)], dim=1)
@@ -272,8 +277,69 @@ class URDFormer(nn.Module):
 
         cls_pred = parent_embedding @ torch.transpose(children_embedding, 2, 3) / 32**0.5
 
-
         return position_x, position_y, position_z, position_end_x, position_end_y, position_end_z, mesh_type, cls_pred.permute([0, 2, 3, 1]), base_mesh_type
+
+    def training_step(self, batch, batch_idx):
+        img, bbox, mask = batch[0]["img"], batch[0]["bbox"], batch[0]["masks"]
+        position_x, position_y, position_z, position_end_x, position_end_y, position_end_z, mesh_type, cls_pred, base_mesh_type = self(img, bbox, mask)
+
+        # Compute the losses
+        supervision = batch[1]
+        positions = supervision["positions"]
+        postition_gt_min, position_gt_max = positions
+        position_gt_x = postition_gt_min[:, :, 0]
+        position_gt_y = postition_gt_min[:, :, 1]
+        position_gt_z = postition_gt_min[:, :, 2]
+        position_gt_x_end = position_gt_max[:, :, 0]
+        position_gt_y_end = position_gt_max[:, :, 1]
+        position_gt_z_end = position_gt_max[:, :, 2]
+        gt_mesh_type = supervision["mesh_types"]
+        gt_connectivity = supervision["connectivity"]
+        gt_base_type = supervision["base_type"]
+
+        loss_fcn = nn.CrossEntropyLoss()
+        bce_loss = nn.BCEWithLogitsLoss()
+        loss_position_x = loss_fcn(position_x.transpose(1, 2), position_gt_x.long())
+        loss_position_y = loss_fcn(position_y.transpose(1, 2), position_gt_y.long())
+        loss_position_z = loss_fcn(position_z.transpose(1, 2), position_gt_z.long())
+
+        loss_position_end_x = loss_fcn(position_end_x.transpose(1, 2), position_gt_x_end.long())
+        loss_position_end_y = loss_fcn(position_end_y.transpose(1, 2), position_gt_y_end.long())
+        loss_position_end_z = loss_fcn(position_end_z.transpose(1, 2), position_gt_z_end.long())
+
+        loss_mesh = loss_fcn(mesh_type.transpose(1, 2), gt_mesh_type.long())
+
+        loss_parent_cls = bce_loss(cls_pred, gt_connectivity.float())
+
+        loss_base = loss_fcn(base_mesh_type, gt_base_type.long())
+
+        loss = loss_position_x + loss_position_y + loss_position_z + \
+               loss_position_end_x + loss_position_end_y + loss_position_end_z + \
+               loss_mesh + 5 * loss_parent_cls + loss_base
+
+        loss_dict = {
+            "loss": loss,
+            "loss_position_x": loss_position_x,
+            "loss_position_y": loss_position_y,
+            "loss_position_z": loss_position_z,
+            "loss_position_end_x": loss_position_end_x,
+            "loss_position_end_y": loss_position_end_y,
+            "loss_position_end_z": loss_position_end_z,
+            "loss_mesh": loss_mesh,
+            "loss_parent_cls": loss_parent_cls,
+            "loss_base": loss_base,
+        }
+        self.log('train/loss', loss_dict, on_epoch=True, on_step=False, logger=True)
+        return loss_dict
+
+    def validation_step(self, batch, batch_idx):
+        loss_dict = self.training_step(batch, batch_idx)
+        self.log('val/loss', loss_dict, on_epoch=True, on_step=False, logger=True)
+        return loss_dict
+
+    def configure_optimizers(self):
+        optimizer = torch.optim.Adam(self.parameters(), **self.optimizer_cfg)
+        return optimizer
 
 class Block(nn.Module):
     """Transformer blocks with support of window attention and residual propagation blocks"""
