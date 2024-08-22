@@ -22,6 +22,9 @@ if __name__ == '__main__':
     dm = PMDataModule(cfg)
 
     model = URDFormer(**cfg.URDFormer)
+    if cfg.train.resume:
+        print(f"Resuming training from checkpoint {cfg.train.resume_path}")
+        model.load_state_dict(torch.load(cfg.train.resume_path)['model_state_dict'])
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
@@ -45,7 +48,6 @@ if __name__ == '__main__':
                          gpus=1,
                          accelerator='gpu',
                          strategy='ddp',
-                         resume_from_checkpoint=cfg.train.resume_path if cfg.train.resume else None,
                          check_val_every_n_epoch=cfg.train.val_interval,
                          log_every_n_steps=1,
                          callbacks=[checkpoint_callback],
