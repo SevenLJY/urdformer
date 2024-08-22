@@ -17,6 +17,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     cfg = omegaconf.OmegaConf.load(args.cfg)
+    cfg_dict = omegaconf.OmegaConf.to_container(cfg, resolve=True)
     pl.seed_everything(cfg.train.seed)
 
     dm = PMDataModule(cfg)
@@ -41,6 +42,7 @@ if __name__ == '__main__':
         save_last=True,)
 
     logger = WandbLogger(**cfg.logger)
+    logger.log_hyperparams(cfg_dict)
     print(f"WandbLogger initialized with project: {logger.experiment.project}, name: {logger.experiment.name}")
 
     trainer = pl.Trainer(max_epochs=cfg.train.epochs,
