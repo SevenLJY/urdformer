@@ -1,3 +1,4 @@
+import copy
 import json
 import os
 import time
@@ -13,13 +14,17 @@ PM2RGSEMREF = {"StorageFurniture": "cabinet_kitchen",
                "Oven": "oven",
                "Dishwasher": "dishwasher",
                "WashingMachine": "washer",
-               "Refrigerator": "fridge"}
+               "Refrigerator": "fridge",
+               "Table": "table",
+               "Microwave": "microwave",}
 
 RGSEM2PMREF = {"cabinet_kitchen": "StorageFurniture",
                "oven": "Oven",
                "dishwasher": "Dishwasher",
                "washer": "WashingMachine",
-               "fridge": "Refrigerator"}
+               "fridge": "Refrigerator",
+               "table": "Table",
+               "microwave": "Microwave",}
 
 RG2CODE = {"none": 0,
            "cabinet_kitchen": 1,
@@ -27,8 +32,8 @@ RG2CODE = {"none": 0,
            "dishwasher": 3,
            "washer": 4,
            "fridge": 5,
-           "oven_fan": 6,
-           "shelf_base": 7}
+           "table": 6,
+           "microwave": 7}
 
 """
 base_names = [
@@ -63,7 +68,7 @@ class PMDataset(Dataset):
         print(f"Data loaded in {time.time() - start:.2f} seconds")
 
     def _load_data(self):
-        data = {"anno": [], "img": [], "bbox": [], "supervision": [], "masks": []}
+        data = {"anno": [], "img": [], "bbox": [], "supervision": [], "masks": [], "valid_parts_map": []}
 
         for idx, model_id in enumerate(tqdm(self.model_ids)):
             # print(f"Loading model {model_id}")
@@ -71,7 +76,7 @@ class PMDataset(Dataset):
                 model_data = json.load(f)
 
             # Make a version with base being the first part
-            new_order, new_model_data = self._reorder_tree(model_data.copy())
+            new_order, new_model_data = self._prepare_tree(copy.deepcopy(model_data))
             data["anno"].append(new_model_data)
 
             # Load the segmentation masks
@@ -83,9 +88,12 @@ class PMDataset(Dataset):
                 data["img"].append(img)
 
                 # Get the bounding box for each part
-                bboxes = self._get_bbox(segs[view_id], model_data["diffuse_tree"])
+                bbox_part_order_map, bboxes = self._get_bbox(segs[view_id], model_data["diffuse_tree"])
+                data["valid_parts_map"].append(np.in1d(np.array(new_order), np.array(bbox_part_order_map))[1:])
+
                 current_bboxes = np.zeros((self.cfg.dataset.num_max_parts, 4))
-                current_bboxes[:bboxes.shape[0]] = bboxes
+                if bboxes.shape[0] > 0:
+                    current_bboxes[:bboxes.shape[0]] = bboxes
                 data["bbox"].append(np.expand_dims(current_bboxes, 0))
 
                 # Calculate masks (empty)
@@ -96,18 +104,21 @@ class PMDataset(Dataset):
 
             mesh_types = self._get_mesh_types(new_model_data)
             padded_mesh_types = np.zeros((self.cfg.dataset.num_max_parts), dtype=np.int8)
-            padded_mesh_types[:len(mesh_types)] = mesh_types
+            if len(mesh_types) > 0:
+                padded_mesh_types[:len(mesh_types)] = mesh_types
 
             positions_min, positions_max = self._get_positions(new_model_data["diffuse_tree"], mesh_types)
             padded_positions_min = np.zeros((self.cfg.dataset.num_max_parts, 3), dtype=np.int8)
             padded_positions_max = np.zeros((self.cfg.dataset.num_max_parts, 3), dtype=np.int8)
-            padded_positions_min[:len(positions_min)] = positions_min
-            padded_positions_max[:len(positions_max)] = positions_max
+            if len(positions_min) > 0:
+                padded_positions_min[:len(positions_min)] = positions_min
+                padded_positions_max[:len(positions_max)] = positions_max
 
             base_type = RG2CODE[PM2RGSEMREF[new_model_data["meta"]["obj_cat"]]]
             connectivity = self._get_connectivity(new_model_data["diffuse_tree"])
             padded_connectivity = np.zeros((self.cfg.dataset.num_max_parts + 1, self.cfg.dataset.num_max_parts + 1, self.cfg.URDFormer.num_relations), dtype=np.int8)
-            padded_connectivity[:len(connectivity)] = connectivity
+            if len(connectivity) > 0:
+                padded_connectivity[:len(connectivity)] = connectivity
 
             supervision = {
                 "positions": (padded_positions_min, padded_positions_max),
@@ -171,8 +182,8 @@ class PMDataset(Dataset):
         tree = model_data["diffuse_tree"]
 
         # First check if the base is already the first part
-        if tree[0]["name"] == "base":
-            return list(range(len(tree))), tree
+        # if tree[0]["name"] == "base":
+        #    return list(range(len(tree))), tree
 
         base_idx = -1
         for idx, part in enumerate(tree):
@@ -205,28 +216,31 @@ class PMDataset(Dataset):
                 if child < base_idx:
                     part["children"][i] += 1
             new_tree.append(part)
-        # Now proceed to remove the parts that are not needed
+        parts_to_remove = []
         for idx, part in enumerate(new_tree):
             if part["name"] in ["wheel", "shelf", "tray"]:
-                new_tree.pop(idx)
-                new_order.pop(idx)
-                for part2 in new_tree:
-                    if part2["id"] > idx:
-                        part2["id"] -= 1
-                    if part2["parent"] == idx:
-                        part2["parent"] = part["parent"]
-                        new_tree[part2["parent"]]["children"].append(part2["id"])
-                    elif part2["parent"] > idx:
-                        part2["parent"] -= 1
-                    part2["children"] = [child - 1 if child > idx else child for child in part2["children"]]
-                    if idx in part2["children"]:
-                        part2["children"].remove(idx)
+                parts_to_remove.append(idx)
+
+        for idx in reversed(parts_to_remove):
+            removed_part = new_tree.pop(idx)
+            new_order.pop(idx)
+            for part in new_tree:
+                if part["id"] > idx:
+                    part["id"] -= 1
+                if part["parent"] == idx:
+                    part["parent"] = removed_part["parent"]
+                    new_tree[removed_part["parent"]]["children"].append(part["id"])
+                elif part["parent"] > idx:
+                    part["parent"] -= 1
+                part["children"] = [child - 1 if child > idx else child for child in part["children"]]
+                if idx in part["children"]:
+                    part["children"].remove(idx)
         new_model_data = model_data
         new_model_data["diffuse_tree"] = new_tree
         return new_order, new_model_data
 
     def _get_mesh_types(self, anno):
-        # 'none', 'drawer', 'doorL', 'doorR', 'handle', 'knob', 'washer_door', 'doorD', 'oven_door'
+        # 'none', 'drawer', 'doorL', 'doorR', 'handle', 'knob', 'washer_door', 'doorD', 'oven_door', 'doorU'
         obj_cat = anno["meta"]["obj_cat"]
         mesh_types = []
         for partInfo in anno["diffuse_tree"]:
@@ -237,13 +251,17 @@ class PMDataset(Dataset):
             elif partInfo["name"] == "door":
                 # Check the direction of opening
                 axis_major_dir = np.argmax(np.abs(np.array(partInfo["joint"]["axis"]["direction"])))
-                if axis_major_dir == 0:
-                    # Axis is horizontal -> down motion
-                    # Now either doorD, or oven_door
+                if axis_major_dir == 0 or axis_major_dir == 2:
+                    # Axis is horizontal
+                    # Now either doorD, or oven_door or doorU
                     if obj_cat == "Oven":
                         mesh_types.append(8)
                     else:
-                        mesh_types.append(7)
+                        # Check whether axis origin is on top or bottom
+                        if np.array(partInfo["joint"]["axis"]["origin"])[1] < np.array(partInfo["aabb"]["center"])[1]:
+                            mesh_types.append(7)
+                        else:
+                            mesh_types.append(9)
                 elif axis_major_dir == 1:
                     # Axis is vertical -> left/right motion
                     # Now check the origin relatively to part center x
@@ -271,9 +289,10 @@ class PMDataset(Dataset):
         # doorR is voxelized from bottom-right corner to top left corner
         # handle, knob only have center voxelized (so start and end are the same). Also order changes based on parent type
         # doorU is omitted in original checkpoint
+        if len(mesh_types) == 0:
+            return np.zeros([len(tree) - 1, 3], dtype=np.int8), np.zeros([len(tree) - 1, 3], dtype=np.int8)
         positions_min = np.zeros([len(tree) - 1, 3], dtype=np.int8)
         positions_max = np.zeros([len(tree) - 1, 3], dtype=np.int8)
-
         # Our data is y-up, we can easily voxelize it in y-up (using x and y as y and z in the output)
         for idx, part in enumerate(tree[1:]):
             mesh_type = mesh_types[idx]
@@ -375,6 +394,7 @@ class PMDataset(Dataset):
         crop_seg = seg[int(y):int(y + 224), int(x):int(x + 224)]
         inst_id = 0
         bboxes = []
+        part_order_map = []
         for part in tree:
             if part["name"] != "base":
                 seg_id = self.semantic_ref["fwd"][part["name"]] * 100 + inst_id
@@ -391,10 +411,11 @@ class PMDataset(Dataset):
                 # Create the bounding box coordinates
                 bounding_box = np.asarray([min_row, min_col, max_row, max_col], dtype=np.float32)
                 bboxes.append(bounding_box)
+                part_order_map.append(inst_id)
             inst_id += 1
         normalized_bboxes = self._normalize_bbox(bboxes)
         bboxes = np.asarray(normalized_bboxes, dtype=np.float32)
-        return bboxes
+        return part_order_map, bboxes
 
     def _normalize_bbox(self, bboxes, w=224, h=224):
         normalize_bboxes = []
@@ -417,5 +438,36 @@ class PMDataset(Dataset):
             "bbox": self.data["bbox"][idx],
             "masks": self.data["masks"][idx]
         }
-        supervision = self.data["supervision"][self.index_map[idx]]
+        if np.all(self.data["valid_parts_map"][idx]):
+            supervision = self.data["supervision"][self.index_map[idx]]
+        else:
+            # Create supervision copies, excluding the occluded parts
+            supervision = self.data["supervision"][self.index_map[idx]].copy()
+            valid_parts_map = self.data["valid_parts_map"][idx]
+            mesh_types = np.zeros_like(supervision["mesh_types"])
+            mesh_types[:np.sum(valid_parts_map)] = supervision["mesh_types"][np.where(valid_parts_map)[0]]
+            supervision["mesh_types"] = mesh_types
+            positions_min = np.zeros_like(supervision["positions"][0])
+            positions_max = np.zeros_like(supervision["positions"][1])
+            positions_min[:np.sum(valid_parts_map)] = supervision["positions"][0][np.where(valid_parts_map)[0]]
+            positions_max[:np.sum(valid_parts_map)] = supervision["positions"][1][np.where(valid_parts_map)[0]]
+            supervision["positions"] = (positions_min, positions_max)
+            connectivity = supervision["connectivity"]
+            connected_to_ids = np.where(connectivity[:, :, 0] == 1)[1]
+
+            old_to_new_id = np.full(33, -1, dtype=int)
+            valid_indices = np.where(valid_parts_map)[0]
+            old_to_new_id[valid_indices + 1] = np.arange(len(valid_indices)) + 1
+            old_to_new_id[0] = 0
+
+            new_connectivity = np.zeros_like(connectivity)
+
+            for i in range(1, 33):
+                if i - 1 < len(valid_parts_map) and valid_parts_map[i - 1] and connected_to_ids[i - 1] >= 0:
+                    new_id = old_to_new_id[i]
+                    new_connected_to = old_to_new_id[connected_to_ids[i - 1]]
+                    if new_connected_to >= 0:
+                        new_connectivity[new_id, new_connected_to, 0] = 1
+
+            supervision["connectivity"] = new_connectivity
         return input_data, supervision

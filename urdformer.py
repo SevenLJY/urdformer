@@ -104,6 +104,7 @@ class URDFormer(pl.LightningModule):
         num_roots: int = 5,
         backbone_mode: int = 0,
         mesh_num: int=8,
+        part_mesh_num: int=9,
         optimizer_cfg: dict = {"lr": 1e-4, "weight_decay": 0.05, "eps": 1e-8, "betas": (0.9, 0.999)},
     ) -> None:
         super().__init__()
@@ -200,7 +201,7 @@ class URDFormer(pl.LightningModule):
         self.mesh_head = nn.Sequential(
             nn.Linear(512, 512),
             nn.LeakyReLU(),
-            nn.Linear(512, 9), #'none', 'drawer', 'doorL', 'doorR', 'handle', 'knob', 'washer_door', 'doorD', 'oven_door'
+            nn.Linear(512, part_mesh_num),  #'none', 'drawer', 'doorL', 'doorR', 'handle', 'knob', 'washer_door', 'doorD', 'oven_door', "doorU"
         )
 
         self.base_mesh_head = nn.Sequential(

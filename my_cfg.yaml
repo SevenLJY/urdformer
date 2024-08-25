@@ -1,6 +1,7 @@
 dataset:
   data_root: ./data
-  data_split: ./urdformer_split.json
+  data_split: ./data_split.json
+  # data_split: ./urdformer_split.json
   # data_split: ./overfit.json
   semantic_ref: ../svr-ao/utils/semantic_ref.json
   n_views: 18
@@ -9,11 +10,12 @@ dataset:
 dataloader:
   batch_size: 32
   num_workers: 4
-  shuffle: True
+  shuffle: False
 
 URDFormer:
   num_roots: 1
   num_relations: 6
+  part_mesh_num: 10
   optimizer_cfg:
     lr: 1e-4
     weight_decay: 0.05
