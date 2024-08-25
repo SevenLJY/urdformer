@@ -105,6 +105,7 @@ class URDFormer(pl.LightningModule):
         backbone_mode: int = 0,
         mesh_num: int=8,
         part_mesh_num: int=9,
+        conn_loss_weight: float = 5.0,
         optimizer_cfg: dict = {"lr": 1e-4, "weight_decay": 0.05, "eps": 1e-8, "betas": (0.9, 0.999)},
     ) -> None:
         super().__init__()
@@ -117,6 +118,7 @@ class URDFormer(pl.LightningModule):
         self.num_relations = num_relations
 
         self.optimizer_cfg = optimizer_cfg
+        self.conn_loss_weight = conn_loss_weight
 
         ############# use pretrained MAE ########
         self.img_backbone, gap_dim = vit_s16(pretrained="backbones/mae_pretrain_hoi_vit_small.pth", img_size=224)
@@ -316,7 +318,7 @@ class URDFormer(pl.LightningModule):
 
         loss = loss_position_x + loss_position_y + loss_position_z + \
                loss_position_end_x + loss_position_end_y + loss_position_end_z + \
-               loss_mesh + 5 * loss_parent_cls + loss_base
+               loss_mesh + self.conn_loss_weight * loss_parent_cls + loss_base
 
         loss_dict = {
             "loss": loss,

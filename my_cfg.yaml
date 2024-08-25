@@ -3,7 +3,7 @@ dataset:
   data_split: ./data_split.json
   # data_split: ./urdformer_split.json
   # data_split: ./overfit.json
-  semantic_ref: ../svr-ao/utils/semantic_ref.json
+  semantic_ref: ./semantic_ref.json
   n_views: 18
   num_max_parts: 32
 
@@ -16,6 +16,7 @@ URDFormer:
   num_roots: 1
   num_relations: 6
   part_mesh_num: 10
+  conn_loss_weight: 5.0 # Default is 5.0
   optimizer_cfg:
     lr: 1e-4
     weight_decay: 0.05
