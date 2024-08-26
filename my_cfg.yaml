@@ -8,16 +8,16 @@ dataset:
   num_max_parts: 32
 
 dataloader:
-  batch_size: 32
-  num_workers: 4
-  shuffle: False
+  batch_size: 256
+  num_workers: 16
+  shuffle: True
 
 URDFormer:
   num_roots: 1
   num_relations: 6
   part_mesh_num: 10
   conn_loss_weight: 5.0 # Default is 5.0
-  base_loss_weight: 2.0 # Default is 1.0
+  base_loss_weight: 1.0 # Default is 1.0
   optimizer_cfg:
     lr: 1e-4
     weight_decay: 0.05
@@ -34,6 +34,6 @@ train:
   resume_path: ./checkpoints/part.pth
 
 logger:
-  project: urdformer
-  name: DEBUG
+  project: urdformer_masked_loss
+  name: scratch
 
