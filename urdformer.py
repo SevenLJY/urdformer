@@ -106,6 +106,7 @@ class URDFormer(pl.LightningModule):
         mesh_num: int=8,
         part_mesh_num: int=9,
         conn_loss_weight: float = 5.0,
+        base_loss_weight: float = 1.0,
         optimizer_cfg: dict = {"lr": 1e-4, "weight_decay": 0.05, "eps": 1e-8, "betas": (0.9, 0.999)},
     ) -> None:
         super().__init__()
@@ -119,6 +120,7 @@ class URDFormer(pl.LightningModule):
 
         self.optimizer_cfg = optimizer_cfg
         self.conn_loss_weight = conn_loss_weight
+        self.base_loss_weight = base_loss_weight
 
         ############# use pretrained MAE ########
         self.img_backbone, gap_dim = vit_s16(pretrained="backbones/mae_pretrain_hoi_vit_small.pth", img_size=224)
@@ -227,6 +229,30 @@ class URDFormer(pl.LightningModule):
             )
             self.blocks.append(block)
 
+        self.init_weights()
+
+    def init_weights(self):
+        def _init_weights(m):
+            if isinstance(m, nn.Linear):
+                nn.init.xavier_uniform_(m.weight)
+                if m.bias is not None:
+                    nn.init.constant_(m.bias, 0)
+            elif isinstance(m, nn.LayerNorm):
+                nn.init.constant_(m.bias, 0)
+                nn.init.constant_(m.weight, 1.0)
+            elif isinstance(m, nn.Embedding):
+                nn.init.normal_(m.weight, mean=0, std=0.02)
+
+        self.apply(_init_weights)
+
+        # Special initialization for attention layers in transformer blocks
+        for block in self.blocks:
+            nn.init.normal_(block.qkv.weight, std=0.02)
+            nn.init.normal_(block.attn.in_proj_weight, std=0.02)
+            nn.init.normal_(block.attn.out_proj.weight, std=0.02)
+            nn.init.constant_(block.attn.in_proj_bias, 0)
+            nn.init.constant_(block.attn.out_proj.bias, 0)
+
     def forward(self, img, bbox, mask, ablation_mode=0):
         img_feature = self.img_backbone(img).view(-1, 14, 14, self.vit_hidden_size).permute(0, 3, 1, 2)
         bbox1 = (bbox * img.shape[-1]).int()
@@ -318,7 +344,7 @@ class URDFormer(pl.LightningModule):
 
         loss = loss_position_x + loss_position_y + loss_position_z + \
                loss_position_end_x + loss_position_end_y + loss_position_end_z + \
-               loss_mesh + self.conn_loss_weight * loss_parent_cls + loss_base
+               loss_mesh + self.conn_loss_weight * loss_parent_cls + self.base_loss_weight * loss_base
 
         loss_dict = {
             "loss": loss,
@@ -333,16 +359,49 @@ class URDFormer(pl.LightningModule):
             "loss_base": loss_base,
         }
         self.log('train/loss', loss_dict, on_epoch=True, on_step=False, logger=True)
+
+        self.log('train/total_loss', loss, on_epoch=True, on_step=False, logger=True)
+        self.log('lr', self.trainer.optimizers[0].param_groups[0]['lr'], on_epoch=True, on_step=False, logger=True)
         return loss_dict
 
     def validation_step(self, batch, batch_idx):
         loss_dict = self.training_step(batch, batch_idx)
         self.log('val/loss', loss_dict, on_epoch=True, on_step=False, logger=True)
+
+        # Log a single scalar for the scheduler
+        self.log('val/total_loss', loss_dict['loss'], on_epoch=True, on_step=False, logger=True)
+
         return loss_dict
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), **self.optimizer_cfg)
-        return optimizer
+
+        warmup_epochs = 15
+        constant_epochs = 15
+        total_epochs = self.trainer.max_epochs
+        cosine_epochs = total_epochs - warmup_epochs - constant_epochs
+
+        warmup_scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=0.1, total_iters=warmup_epochs)
+
+        constant_scheduler = torch.optim.lr_scheduler.ConstantLR(optimizer, factor=1.0, total_iters=constant_epochs)
+
+        cosine_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=cosine_epochs, eta_min=1e-8)
+
+        scheduler = torch.optim.lr_scheduler.SequentialLR(
+            optimizer,
+            schedulers=[warmup_scheduler, constant_scheduler, cosine_scheduler],
+            milestones=[warmup_epochs, warmup_epochs + constant_epochs]
+        )
+
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": {
+                "scheduler": scheduler,
+                "interval": "epoch",
+                "frequency": 1
+            }
+        }
+
 
 class Block(nn.Module):
     """Transformer blocks with support of window attention and residual propagation blocks"""

@@ -17,6 +17,7 @@ URDFormer:
   num_relations: 6
   part_mesh_num: 10
   conn_loss_weight: 5.0 # Default is 5.0
+  base_loss_weight: 2.0 # Default is 1.0
   optimizer_cfg:
     lr: 1e-4
     weight_decay: 0.05
