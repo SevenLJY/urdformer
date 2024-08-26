@@ -68,7 +68,7 @@ class PMDataset(Dataset):
         print(f"Data loaded in {time.time() - start:.2f} seconds")
 
     def _load_data(self):
-        data = {"anno": [], "img": [], "bbox": [], "supervision": [], "masks": [], "valid_parts_map": []}
+        data = {"anno": [], "img": [], "bbox": [], "supervision": [], "masks": [], "valid_parts_map": [], "unpad_masks": []}
 
         for idx, model_id in enumerate(tqdm(self.model_ids)):
             # print(f"Loading model {model_id}")
@@ -92,7 +92,7 @@ class PMDataset(Dataset):
                 data["valid_parts_map"].append(np.in1d(np.array(new_order), np.array(bbox_part_order_map))[1:])
 
                 current_bboxes = np.zeros((self.cfg.dataset.num_max_parts, 4))
-                if bboxes.shape[0] > 0:
+                if bboxes.shape[0] > 0 and sum(np.in1d(np.array(new_order), np.array(bbox_part_order_map))[1:]) > 0:
                     current_bboxes[:bboxes.shape[0]] = bboxes
                 data["bbox"].append(np.expand_dims(current_bboxes, 0))
 
@@ -106,6 +106,8 @@ class PMDataset(Dataset):
             padded_mesh_types = np.zeros((self.cfg.dataset.num_max_parts), dtype=np.int8)
             if len(mesh_types) > 0:
                 padded_mesh_types[:len(mesh_types)] = mesh_types
+            unpad_mesh_type_mask = np.zeros((self.cfg.dataset.num_max_parts), dtype=np.int8)
+            unpad_mesh_type_mask[:len(mesh_types)] = 1
 
             positions_min, positions_max = self._get_positions(new_model_data["diffuse_tree"], mesh_types)
             padded_positions_min = np.zeros((self.cfg.dataset.num_max_parts, 3), dtype=np.int8)
@@ -113,12 +115,16 @@ class PMDataset(Dataset):
             if len(positions_min) > 0:
                 padded_positions_min[:len(positions_min)] = positions_min
                 padded_positions_max[:len(positions_max)] = positions_max
+            unpad_position_mask = np.zeros((self.cfg.dataset.num_max_parts), dtype=np.int8)
+            unpad_position_mask[:len(positions_min)] = 1
 
             base_type = RG2CODE[PM2RGSEMREF[new_model_data["meta"]["obj_cat"]]]
             connectivity = self._get_connectivity(new_model_data["diffuse_tree"])
             padded_connectivity = np.zeros((self.cfg.dataset.num_max_parts + 1, self.cfg.dataset.num_max_parts + 1, self.cfg.URDFormer.num_relations), dtype=np.int8)
             if len(connectivity) > 0:
                 padded_connectivity[:len(connectivity)] = connectivity
+            unpadded_connectivity_mask = np.zeros((self.cfg.dataset.num_max_parts + 1, self.cfg.dataset.num_max_parts + 1, self.cfg.URDFormer.num_relations), dtype=np.int8)
+            unpadded_connectivity_mask[:len(connectivity), :len(connectivity)] = 1
 
             supervision = {
                 "positions": (padded_positions_min, padded_positions_max),
@@ -127,6 +133,7 @@ class PMDataset(Dataset):
                 "connectivity": padded_connectivity
             }
             data["supervision"].append(supervision)
+            data["unpad_masks"].append({"mesh_types": unpad_mesh_type_mask, "positions": unpad_position_mask, "connectivity": unpadded_connectivity_mask})
 
         return data
 
@@ -438,8 +445,9 @@ class PMDataset(Dataset):
             "bbox": self.data["bbox"][idx],
             "masks": self.data["masks"][idx]
         }
-        if np.all(self.data["valid_parts_map"][idx]):
+        if np.all(self.data["valid_parts_map"][idx]) or not np.any(self.data["valid_parts_map"][idx]):
             supervision = self.data["supervision"][self.index_map[idx]]
+            unpad_masks = self.data["unpad_masks"][self.index_map[idx]]
         else:
             # Create supervision copies, excluding the occluded parts
             supervision = self.data["supervision"][self.index_map[idx]].copy()
@@ -470,4 +478,13 @@ class PMDataset(Dataset):
                         new_connectivity[new_id, new_connected_to, 0] = 1
 
             supervision["connectivity"] = new_connectivity
-        return input_data, supervision
+
+            # Handle unpad_masks
+            unpad_masks = copy.deepcopy(self.data["unpad_masks"][self.index_map[idx]])
+            unpad_masks["mesh_types"] = np.zeros_like(unpad_masks["mesh_types"])
+            unpad_masks["positions"] = np.zeros_like(unpad_masks["positions"])
+            unpad_masks["connectivity"] = np.zeros_like(unpad_masks["connectivity"])
+            unpad_masks["mesh_types"][:np.sum(valid_parts_map)] = 1
+            unpad_masks["positions"][:np.sum(valid_parts_map)] = 1
+            unpad_masks["connectivity"][:np.sum(valid_parts_map) + 1, :np.sum(valid_parts_map) + 1] = 1
+        return input_data, supervision, unpad_masks
