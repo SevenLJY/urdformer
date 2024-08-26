@@ -326,8 +326,11 @@ class URDFormer(pl.LightningModule):
         gt_connectivity = supervision["connectivity"]
         gt_base_type = supervision["base_type"]
 
-        loss_fcn = nn.CrossEntropyLoss()
-        bce_loss = nn.BCEWithLogitsLoss()
+        unpad_masks = batch[2]
+
+        loss_fcn = nn.CrossEntropyLoss(reduction="none")
+        loss_scn_reduce = nn.CrossEntropyLoss()
+        bce_loss = nn.BCEWithLogitsLoss(reduction="none")
         loss_position_x = loss_fcn(position_x.transpose(1, 2), position_gt_x.long())
         loss_position_y = loss_fcn(position_y.transpose(1, 2), position_gt_y.long())
         loss_position_z = loss_fcn(position_z.transpose(1, 2), position_gt_z.long())
@@ -340,7 +343,17 @@ class URDFormer(pl.LightningModule):
 
         loss_parent_cls = bce_loss(cls_pred, gt_connectivity.float())
 
-        loss_base = loss_fcn(base_mesh_type, gt_base_type.long())
+        loss_base = loss_scn_reduce(base_mesh_type, gt_base_type.long())
+
+        # Mask + reduce the losses
+        loss_position_x = (loss_position_x * unpad_masks["positions"]).sum() / (unpad_masks["positions"].sum() + 1e-8)
+        loss_position_y = (loss_position_y * unpad_masks["positions"]).sum() / (unpad_masks["positions"].sum() + 1e-8)
+        loss_position_z = (loss_position_z * unpad_masks["positions"]).sum() / (unpad_masks["positions"].sum() + 1e-8)
+        loss_position_end_x = (loss_position_end_x * unpad_masks["positions"]).sum() / (unpad_masks["positions"].sum() + 1e-8)
+        loss_position_end_y = (loss_position_end_y * unpad_masks["positions"]).sum() / (unpad_masks["positions"].sum() + 1e-8)
+        loss_position_end_z = (loss_position_end_z * unpad_masks["positions"]).sum() / (unpad_masks["positions"].sum() + 1e-8)
+        loss_mesh = (loss_mesh * unpad_masks["mesh_types"]).sum() / (unpad_masks["mesh_types"].sum() + 1e-8)
+        loss_parent_cls = (loss_parent_cls * unpad_masks["connectivity"]).sum() / (unpad_masks["connectivity"].sum() + 1e-8)
 
         loss = loss_position_x + loss_position_y + loss_position_z + \
                loss_position_end_x + loss_position_end_y + loss_position_end_z + \
