@@ -16,24 +16,25 @@ URDFormer:
   num_roots: 1
   num_relations: 6
   part_mesh_num: 10
-  conn_loss_weight: 5.0 # Default is 5.0
-  base_loss_weight: 1.0 # Default is 1.0
+  conn_loss_weight: 40.0 # Default is 5.0
+  base_loss_weight: 4.0 # Default is 1.0
+  positions_loss_weight: 1.0 # Default is 1.0
+  mesh_loss_weight: 4.0 # Default is 1.0
   optimizer_cfg:
-    lr: 1e-4
+    lr: 1e-5
     weight_decay: 0.05
     eps: 1e-8
     betas: [0.9, 0.999]
     
 train:
-  epochs: 80
+  epochs: 100
   save_interval: 10
   val_interval: 5
   save_dir: ./checkpoints
-  seed: 42
+  seed: -1
   resume: False
   resume_path: ./checkpoints/part.pth
 
 logger:
   project: urdformer_masked_loss
-  name: scratch
-
+  name: scratch-lr-1e-5-epochs-100-conn-loss-40-no-warmup-base-loss-4-constant-epochs-1-mesh-loss_weight-4

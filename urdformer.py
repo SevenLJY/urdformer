@@ -107,6 +107,8 @@ class URDFormer(pl.LightningModule):
         part_mesh_num: int=9,
         conn_loss_weight: float = 5.0,
         base_loss_weight: float = 1.0,
+        positions_loss_weight: float = 1.0,
+        mesh_loss_weight: float = 1.0,
         optimizer_cfg: dict = {"lr": 1e-4, "weight_decay": 0.05, "eps": 1e-8, "betas": (0.9, 0.999)},
     ) -> None:
         super().__init__()
@@ -121,7 +123,8 @@ class URDFormer(pl.LightningModule):
         self.optimizer_cfg = optimizer_cfg
         self.conn_loss_weight = conn_loss_weight
         self.base_loss_weight = base_loss_weight
-
+        self.positions_loss_weight = positions_loss_weight
+        self.mesh_loss_weight = mesh_loss_weight
         ############# use pretrained MAE ########
         self.img_backbone, gap_dim = vit_s16(pretrained="backbones/mae_pretrain_hoi_vit_small.pth", img_size=224)
 
@@ -355,9 +358,9 @@ class URDFormer(pl.LightningModule):
         loss_mesh = (loss_mesh * unpad_masks["mesh_types"]).sum() / (unpad_masks["mesh_types"].sum() + 1e-8)
         loss_parent_cls = (loss_parent_cls * unpad_masks["connectivity"]).sum() / (unpad_masks["connectivity"].sum() + 1e-8)
 
-        loss = loss_position_x + loss_position_y + loss_position_z + \
-               loss_position_end_x + loss_position_end_y + loss_position_end_z + \
-               loss_mesh + self.conn_loss_weight * loss_parent_cls + self.base_loss_weight * loss_base
+        loss = self.positions_loss_weight * (loss_position_x + loss_position_y + loss_position_z) + \
+               self.positions_loss_weight * (loss_position_end_x + loss_position_end_y + loss_position_end_z) + \
+               self.mesh_loss_weight * loss_mesh + self.conn_loss_weight * loss_parent_cls + self.base_loss_weight * loss_base
 
         loss_dict = {
             "loss": loss,
@@ -389,12 +392,9 @@ class URDFormer(pl.LightningModule):
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), **self.optimizer_cfg)
 
-        warmup_epochs = 15
-        constant_epochs = 15
+        constant_epochs = 1
         total_epochs = self.trainer.max_epochs
-        cosine_epochs = total_epochs - warmup_epochs - constant_epochs
-
-        warmup_scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=0.1, total_iters=warmup_epochs)
+        cosine_epochs = total_epochs - constant_epochs
 
         constant_scheduler = torch.optim.lr_scheduler.ConstantLR(optimizer, factor=1.0, total_iters=constant_epochs)
 
@@ -402,8 +402,8 @@ class URDFormer(pl.LightningModule):
 
         scheduler = torch.optim.lr_scheduler.SequentialLR(
             optimizer,
-            schedulers=[warmup_scheduler, constant_scheduler, cosine_scheduler],
-            milestones=[warmup_epochs, warmup_epochs + constant_epochs]
+            schedulers=[constant_scheduler, cosine_scheduler],
+            milestones=[constant_epochs]
         )
 
         return {
