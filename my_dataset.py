@@ -124,7 +124,7 @@ class PMDataset(Dataset):
             if len(connectivity) > 0:
                 padded_connectivity[:len(connectivity)] = connectivity
             unpadded_connectivity_mask = np.zeros((self.cfg.dataset.num_max_parts + 1, self.cfg.dataset.num_max_parts + 1, self.cfg.URDFormer.num_relations), dtype=np.int8)
-            unpadded_connectivity_mask[:len(connectivity), :len(connectivity), 0] = 1
+            unpadded_connectivity_mask[:len(connectivity), :len(connectivity)] = 1
 
             supervision = {
                 "positions": (padded_positions_min, padded_positions_max),
