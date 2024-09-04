@@ -6,6 +6,7 @@ import cv2
 import numpy as np
 from PIL import Image
 from torch.utils.data import Dataset
+from torchvision import transforms
 from tqdm import tqdm
 
 PM2RGSEMREF = {"StorageFurniture": "cabinet_kitchen",
@@ -79,28 +80,40 @@ class PMDataset(Dataset):
             for view_id in range(self.cfg.dataset.n_views):
                 img_path = os.path.join(self.data_root, model_id, "imgs", f"{view_id:02d}.png")
                 img = self._prepare_img(img_path)
-
-                img = np.array(img)
                 data["img"].append(img)
 
                 # Get the bounding box for each part
                 bboxes = self._get_bbox(segs[view_id], model_data["diffuse_tree"])
-                data["bbox"].append(bboxes)
+                current_bboxes = np.zeros((self.cfg.dataset.num_max_parts, 4))
+                current_bboxes[:bboxes.shape[0]] = bboxes
+                data["bbox"].append(np.expand_dims(current_bboxes, 0))
 
                 # Calculate masks (empty)
-                padded_masks = np.zeros((self.cfg.num_max_parts, 14, 14))
-                data["masks"].append(padded_masks)
+                padded_masks = np.zeros((self.cfg.dataset.num_max_parts, 14, 14))
+                data["masks"].append(np.expand_dims(padded_masks, 0))
 
             self.index_map += [idx for _ in range(self.cfg.dataset.n_views)]
+
             mesh_types = self._get_mesh_types(new_model_data)
+            padded_mesh_types = np.zeros((self.cfg.dataset.num_max_parts), dtype=np.int8)
+            padded_mesh_types[:len(mesh_types)] = mesh_types
+
             positions_min, positions_max = self._get_positions(new_model_data["diffuse_tree"], mesh_types)
+            padded_positions_min = np.zeros((self.cfg.dataset.num_max_parts, 3), dtype=np.int8)
+            padded_positions_max = np.zeros((self.cfg.dataset.num_max_parts, 3), dtype=np.int8)
+            padded_positions_min[:len(positions_min)] = positions_min
+            padded_positions_max[:len(positions_max)] = positions_max
+
             base_type = RG2CODE[PM2RGSEMREF[new_model_data["meta"]["obj_cat"]]]
             connectivity = self._get_connectivity(new_model_data["diffuse_tree"])
+            padded_connectivity = np.zeros((self.cfg.dataset.num_max_parts + 1, self.cfg.dataset.num_max_parts + 1, self.cfg.URDFormer.num_relations), dtype=np.int8)
+            padded_connectivity[:len(connectivity)] = connectivity
+
             supervision = {
-                "positions": (positions_min, positions_max),
-                "mesh_types": np.asarray(mesh_types, dtype=np.int8),
+                "positions": (padded_positions_min, padded_positions_max),
+                "mesh_types": np.asarray(padded_mesh_types, dtype=np.int8),
                 "base_type": np.asarray(base_type, dtype=np.int8),
-                "connectivity": connectivity
+                "connectivity": padded_connectivity
             }
             data["supervision"].append(supervision)
 
@@ -267,8 +280,8 @@ class PMDataset(Dataset):
             parent = tree[part["parent"]]
             parent_aabb = parent["aabb"]
             parent_bbox_min, parent_bbox_max = np.asarray(parent_aabb["center"]) - np.asarray(parent_aabb["size"]) / 2, np.asarray(parent_aabb["center"]) + np.asarray(parent_aabb["size"]) / 2
-            parent_x_bins = np.linspace(parent_bbox_min[0], parent_bbox_max[0], 13)
-            parent_y_bins = np.linspace(parent_bbox_min[1], parent_bbox_max[1], 13)
+            parent_x_bins = np.linspace(parent_bbox_min[0], parent_bbox_max[0], 14)
+            parent_y_bins = np.linspace(parent_bbox_min[1], parent_bbox_max[1], 14)
 
             part_aabb = part["aabb"]
             part_bbox_min, part_bbox_max = np.asarray(part_aabb["center"]) - np.asarray(part_aabb["size"]) / 2, np.asarray(part_aabb["center"]) + np.asarray(part_aabb["size"]) / 2
@@ -340,7 +353,18 @@ class PMDataset(Dataset):
         img = img.resize(size=(tgt_size, tgt_size), resample=Image.BICUBIC)
         img = img.crop(box=(16, 16, 240, 240))  # center crop to 224x224
         img = self._make_white_background(img)
-        return img
+
+        to_tensor = transforms.ToTensor()
+        img_tensor = to_tensor(img)
+
+        # Normalize
+        normalize = transforms.Normalize(
+            mean=[0.485, 0.456, 0.406],
+            std=[0.229, 0.224, 0.225]
+        )
+        img_normalized = normalize(img_tensor)
+
+        return img_normalized
 
     def _get_bbox(self, seg, tree):
         seg = cv2.resize(seg, (256, 256), interpolation=cv2.INTER_NEAREST)
@@ -368,8 +392,21 @@ class PMDataset(Dataset):
                 bounding_box = np.asarray([min_row, min_col, max_row, max_col], dtype=np.float32)
                 bboxes.append(bounding_box)
             inst_id += 1
-        bboxes = np.asarray(bboxes, dtype=np.float32)
+        normalized_bboxes = self._normalize_bbox(bboxes)
+        bboxes = np.asarray(normalized_bboxes, dtype=np.float32)
         return bboxes
+
+    def _normalize_bbox(self, bboxes, w=224, h=224):
+        normalize_bboxes = []
+        for bbox in bboxes:
+            normalized = [
+                bbox[0] / w,
+                bbox[1] / h,
+                (bbox[2] - bbox[0]) / w,
+                (bbox[3] - bbox[1]) / h,
+            ]
+            normalize_bboxes.append(normalized)
+        return normalize_bboxes
 
     def __len__(self):
         return len(self.data["img"])

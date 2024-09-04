@@ -1,0 +1,35 @@
+dataset:
+  data_root: ./data
+  data_split: ./urdformer_split.json
+  # data_split: ./overfit.json
+  semantic_ref: ../svr-ao/utils/semantic_ref.json
+  n_views: 18
+  num_max_parts: 32
+
+dataloader:
+  batch_size: 32
+  num_workers: 4
+  shuffle: True
+
+URDFormer:
+  num_roots: 1
+  num_relations: 6
+  optimizer_cfg:
+    lr: 1e-4
+    weight_decay: 0.05
+    eps: 1e-8
+    betas: [0.9, 0.999]
+    
+train:
+  epochs: 80
+  save_interval: 10
+  val_interval: 5
+  save_dir: ./checkpoints
+  seed: 42
+  resume: False
+  resume_path: ./checkpoints/part.pth
+
+logger:
+  project: urdformer
+  name: DEBUG
+
