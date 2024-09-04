@@ -22,7 +22,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--exp_dir",
         type=str,
-        default="exps/freezed_gt",
+        default="exps/freezed_pred",
         help="The directory of the predicted results",
     )
     parser.add_argument(
@@ -55,7 +55,10 @@ if __name__ == "__main__":
     i = 0
     for case in tqdm(cases):
         tokens = case.split("_")
-        model_id = f"{tokens[0]}/{tokens[1]}"
+        model_id = ''
+        for i in range(len(tokens)-1):
+            model_id += tokens[i] + '/'
+        model_id = model_id[:-1]
         pred = json.load(open(os.path.join(args.exp_dir, case, "object.json"), "r"))
         gt = json.load(open(os.path.join(args.gt_dir, model_id, "train_v3.json"), "r"))
 
@@ -70,8 +73,8 @@ if __name__ == "__main__":
 
         aid_cdist = scores['AS-cDist']
         rid_cdist = scores['RS-cDist']
-        aid_iou = scores['AS-IoU']
-        rid_iou = scores['RS-IoU']
+        aid_iou = 1. - scores['AS-IoU']
+        rid_iou = 1. - scores['RS-IoU']
         aid_cd = cds['AS-CD']
         rid_cd = cds['RS-CD']
 

@@ -413,11 +413,11 @@ def collect_html(args):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--image_path", default="test_data/images", type=str)
-    parser.add_argument("--exp_dir", default="exps/freezed_pred", type=str)
+    parser.add_argument("--image_path", default="test_data/hssd_images", type=str)
+    parser.add_argument("--exp_dir", default="exps/hssd_freezed_gt", type=str)
     parser.add_argument(
         "--label_dir",
-        default="test_data/labels_filtered",
+        default="test_data/hssd_labels_gt",
         type=str,
         help="directory to the 2D bounding boxes, either test_data/labels_gt or test_data/labels_pred",
     )

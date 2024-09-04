@@ -65,7 +65,7 @@ def normalize_bbox(bboxes, w=224, h=224):
 
 def prepare_gt_bbox(args):
     input_path = args.image_path
-    manual_dir = "test_data/labels_gt"
+    manual_dir = args.gt_save_dir
     os.makedirs(manual_dir, exist_ok=True)
     for f in tqdm(os.listdir(input_path)):
         if f.endswith(".png"):
@@ -73,9 +73,12 @@ def prepare_gt_bbox(args):
             src_img_path = os.path.join(input_path, f)
             dst_img_path = os.path.join(manual_dir, f[:-4])
             img = cv.imread(src_img_path)
-            tokens = f[:-4].split("_")
-            model_id = f"{tokens[0]}/{tokens[1]}"
-            img_id = tokens[2]
+            tokens = f[:-4].split("@")
+            model_id = ''
+            for i in range(len(tokens)-1):
+                model_id += tokens[i] + '/'
+            model_id = model_id[:-1]
+            img_id = tokens[-1]
             bboxes = get_part_bbox(model_id, img_id)
             visualize_bbox(img, dst_img_path, bboxes, thickness=2)
             normalize_bboxes = normalize_bbox(bboxes)
@@ -92,7 +95,7 @@ def evaluate(args, detection_args):
     detector(args.scene_type, detection_args)
     # # # run postprocessing
     label_dir = args.pred_save_dir
-    save_dir = "test_data/labels_filtered"
+    save_dir = args.filtered_save_dir
     os.makedirs(save_dir, exist_ok=True)
     post_processing(label_dir, input_path, save_dir)
 
@@ -100,8 +103,11 @@ def main():
     parser = argparse.ArgumentParser()
     # detection arguments
     parser.add_argument("--scene_type", default="all", type=str)
-    parser.add_argument("--image_path", default="test_data/images", type=str)
-    parser.add_argument("--pred_save_dir", default="test_data/labels_pred", type=str)
+    parser.add_argument("--image_path", default="test_data/hssd_images", type=str)
+    parser.add_argument("--pred_save_dir", default="test_data/hssd_labels_pred", type=str)
+    parser.add_argument("--filtered_save_dir", default="test_data/hssd_labels_filtered", type=str)
+    parser.add_argument("--gt_save_dir", default="test_data/hssd_labels_gt", type=str)
+
 
     ##################### IMPORTANT! ###############################
     # URDFormer replies on good bounding boxes of parts and ojects, you can achieve this by our annotation tool (~1min label per image)

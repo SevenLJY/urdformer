@@ -29,19 +29,28 @@ def load_model_ids(split_file, storage_only=False):
 
 if __name__ == '__main__':
     src_root = '/localhome/jla861/Documents/projects/im-gen-ao/data'
-    dst_root = 'test_data/images'
-    split_file = f'/localhome/jla861/Documents/projects/im-gen-ao/svr-ao/src/data/data_split.json'
+    dst_root = 'test_data/hssd_images'
+    split_file = f'/localhome/jla861/Documents/projects/im-gen-ao/svr-ao/src/data/data_hssd.json'
     test_ids = load_model_ids(split_file)
+    os.makedirs(dst_root, exist_ok=True)
     
-    for model_id in tqdm(test_ids): # 76
-        fname = model_id.replace('/', '_')
+    for model_id in tqdm(test_ids):
+        fname = model_id.replace('/', '@')
 
         src_path = os.path.join(src_root, model_id, 'imgs', '18.png')
-        dst_path = os.path.join(dst_root, f'{fname}_18.png')
-        img = _resize(src_path)
-        img.save(dst_path)
+        dst_path = os.path.join(dst_root, f'{fname}@18.png')
+        if os.path.exists(dst_path):
+            pass
+        else:
+            print(f'processing: {fname}_18')
+            img = _resize(src_path)
+            img.save(dst_path)
 
         src_path = os.path.join(src_root, model_id, 'imgs', '19.png')
-        dst_path = os.path.join(dst_root, f'{fname}_19.png')
-        img = _resize(src_path)
-        img.save(dst_path)
+        dst_path = os.path.join(dst_root, f'{fname}@19.png')
+        if os.path.exists(dst_path):
+            pass
+        else:
+            print(f'processing: {fname}_19')
+            img = _resize(src_path)
+            img.save(dst_path)

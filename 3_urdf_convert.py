@@ -333,7 +333,7 @@ def convert(root_dir):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--exp_dir", default="exps/freezed_pred", type=str)
+    parser.add_argument("--exp_dir", default="exps/hssd_freezed_gt", type=str)
 
     args = parser.parse_args()
 
