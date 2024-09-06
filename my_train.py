@@ -53,9 +53,7 @@ if __name__ == '__main__':
                          strategy='ddp',
                          check_val_every_n_epoch=cfg.train.val_interval,
                          log_every_n_steps=1,
-                         callbacks=[checkpoint_callback],
-                         gradient_clip_val=2.0,
-                         gradient_clip_algorithm="norm",)
+                         callbacks=[checkpoint_callback],)
     trainer.fit(model, datamodule=dm)
 
     print(f"Checkpoints saved at: {checkpoint_dir}")
