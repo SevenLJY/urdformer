@@ -256,6 +256,14 @@ class URDFormer(pl.LightningModule):
             nn.init.constant_(block.attn.in_proj_bias, 0)
             nn.init.constant_(block.attn.out_proj.bias, 0)
 
+    def load_partial_weights_init(self, path):
+        self.init_weights()
+        state_dict = torch.load(path)["model_state_dict"]
+        # Load weights except for mesh_head and base_mesh_head
+        state_dict = {k: v for k, v in state_dict.items() if "mesh_head" not in k and "base_mesh_head" not in k}
+        print("Expected loss of mesh_head and base_mesh_head weights: ")
+        self.load_state_dict(state_dict, strict=False)
+
     def forward(self, img, bbox, mask, ablation_mode=0):
         img_feature = self.img_backbone(img).view(-1, 14, 14, self.vit_hidden_size).permute(0, 3, 1, 2)
         bbox1 = (bbox * img.shape[-1]).int()
