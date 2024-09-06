@@ -25,7 +25,8 @@ if __name__ == '__main__':
     model = URDFormer(**cfg.URDFormer)
     if cfg.train.resume:
         print(f"Resuming training from checkpoint {cfg.train.resume_path}")
-        model.load_state_dict(torch.load(cfg.train.resume_path)['model_state_dict'])
+        # model.load_state_dict(torch.load(cfg.train.resume_path)['model_state_dict'])
+        model.load_partial_weights_init(cfg.train.resume_path)
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
