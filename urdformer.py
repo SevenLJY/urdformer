@@ -109,6 +109,7 @@ class URDFormer(pl.LightningModule):
         base_loss_weight: float = 1.0,
         positions_loss_weight: float = 1.0,
         mesh_loss_weight: float = 1.0,
+        init: bool = True,
         optimizer_cfg: dict = {"lr": 1e-4, "weight_decay": 0.05, "eps": 1e-8, "betas": (0.9, 0.999)},
     ) -> None:
         super().__init__()
@@ -231,8 +232,8 @@ class URDFormer(pl.LightningModule):
                 act_layer=act_layer,
             )
             self.blocks.append(block)
-
-        self.init_weights()
+        if init:
+            self.init_weights()
 
     def init_weights(self):
         def _init_weights(m):

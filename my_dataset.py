@@ -71,7 +71,7 @@ class PMDataset(Dataset):
         data = {"anno": [], "img": [], "bbox": [], "supervision": [], "masks": [], "valid_parts_map": [], "unpad_masks": []}
 
         for idx, model_id in enumerate(tqdm(self.model_ids)):
-            # print(f"Loading model {model_id}")
+            print(f"Loading model {model_id}")
             with open(os.path.join(self.data_root, model_id, "train_v3.json"), "r") as f:
                 model_data = json.load(f)
 

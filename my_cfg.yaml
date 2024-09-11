@@ -1,7 +1,7 @@
 dataset:
   data_root: ./data
-  data_split: ./data_split.json
-  # data_split: ./urdformer_split.json
+  # data_split: ./data_split_aug_123.json
+  data_split: ./urdformer_split.json
   # data_split: ./overfit.json
   semantic_ref: ./semantic_ref.json
   n_views: 18
@@ -13,13 +13,14 @@ dataloader:
   shuffle: True
 
 URDFormer:
+  init: False
   num_roots: 1
   num_relations: 6
   part_mesh_num: 10
-  conn_loss_weight: 40.0 # Default is 5.0
+  conn_loss_weight: 20.0 # Default is 5.0
   base_loss_weight: 4.0 # Default is 1.0
   positions_loss_weight: 1.0 # Default is 1.0
-  mesh_loss_weight: 4.0 # Default is 1.0
+  mesh_loss_weight: 1.0 # Default is 1.0
   optimizer_cfg:
     lr: 1e-5
     weight_decay: 0.05
@@ -27,14 +28,14 @@ URDFormer:
     betas: [0.9, 0.999]
     
 train:
-  epochs: 100
+  epochs: 200
   save_interval: 10
   val_interval: 5
   save_dir: ./checkpoints
   seed: -1
-  resume: False
+  resume: True
   resume_path: ./checkpoints/part.pth
 
 logger:
   project: urdformer_masked_loss
-  name: scratch-lr-1e-5-epochs-100-conn-loss-40-no-warmup-base-loss-4-constant-epochs-1-mesh-loss_weight-4
+  name: pretrained-lr-1e-5-epochs-200-conn-loss-20-base-loss-4-no-gradd-clip
