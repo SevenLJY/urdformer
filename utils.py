@@ -1,22 +1,23 @@
-import pybullet as p
-import time
-import pybullet_data
-import numpy as np
-import random
 import glob
-import torch
-from PIL import Image
-import PIL
-from scipy.spatial.transform import Rotation as Rot
 import json
-import cv2
-import torchvision.transforms as transforms
 import os
+import random
+import time
 from argparse import ArgumentParser
-import networkx as nx
-import matplotlib.pyplot as plt
-from io import BytesIO
 from copy import copy
+from io import BytesIO
+
+import cv2
+import matplotlib.pyplot as plt
+import networkx as nx
+import numpy as np
+import PIL
+import pybullet as p
+import pybullet_data
+import torch
+import torchvision.transforms as transforms
+from PIL import Image
+from scipy.spatial.transform import Rotation as Rot
 
 # np.random.seed(777) #77, 777, 24
 # ref_colors = np.random.uniform(low=0.6, high=0.9, size=(32, 3))
@@ -129,8 +130,6 @@ def visual_collision_shapes(links, link_scales, link_positions, random_color=Tru
         collisionIndices.append(collisionShapeId)
 
     return collisionIndices, visualIndices, link_positions
-
-
 
 def domain_randomization(
     root_name, link_names, random_frame, linkJointAxis, jointtypes
@@ -577,15 +576,10 @@ def my_visualization_parts(
         "dishwasher",
         "washer",
         "fridge",
-        "oven_fan",
-        "shelf_base",
+        "table",
+        "microwave",
     ]
     part_path = "meshes/parts/"
-
-    # fix the oven fan problem: if there are parts, root shouldn't be oven fan
-    if len(position_pred_ori) > 0 and mesh_base == 6:
-        mesh_base = 1
-
     root = f"meshes/{base_names[mesh_base]}.obj"
 
     position_type = np.arange(13) / 12
@@ -613,6 +607,7 @@ def my_visualization_parts(
             )
     else:
         for i, each_parent in enumerate(parent_pred_ori[num_roots:]):
+            save_each_parent = each_parent.copy()
             each_parent = np.unravel_index(np.argmax(each_parent), each_parent.shape)
             parent_id = each_parent[0]
             # [EDIT by ljy] if invalid parent prediction
@@ -1529,8 +1524,8 @@ def write_urdfs(
     mesh_dir="../meshes",
 ):
     root_rot = Rot.from_quat(root_orientation).as_rotvec()
-    import xml.etree.ElementTree as ET
     import os
+    import xml.etree.ElementTree as ET
     from xml.dom import minidom
 
     def prettify(elem):
