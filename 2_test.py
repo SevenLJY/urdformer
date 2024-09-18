@@ -1,15 +1,17 @@
-import os
-import PIL
-import time
-import glob
-import torch
 import argparse
+import glob
+import os
+import time
+
 import numpy as np
+import PIL
 import pybullet as p
-from tqdm import tqdm
-from urdformer import URDFormer
+import torch
 import torchvision.transforms as transforms
+from tqdm import tqdm
 from utils import my_visualization_parts, viz_graph
+
+from urdformer import URDFormer
 
 
 def get_camera_parameters_move(traj_i):
@@ -254,7 +256,6 @@ def object_prediction(
     ) # template meshes
 
     ##################################################
-
     # animate the object and save the renderings
     animate(
         object_id,
@@ -324,11 +325,14 @@ def evaluate(args):
 
     ########################  URDFormer Core  ##############################
     num_relations = 6  # the number of relations between the object and the scene
-    urdformer_part = URDFormer(num_relations=num_relations, num_roots=1)
-    urdformer_part = urdformer_part.to(device)
-    part_checkpoint = "checkpoints/part.pth"
-    checkpoint = torch.load(part_checkpoint)
-    urdformer_part.load_state_dict(checkpoint["model_state_dict"])
+    # Load our checkpoint
+    urdformer_part = URDFormer.load_from_checkpoint(args.ckpt_path, num_relations=num_relations, num_roots=1, part_mesh_num=10).to(device)
+    urdformer_part.eval()
+    # Load original checkpoint
+    # urdformer_part = URDFormer(num_relations=num_relations, num_roots=1)
+    # urdformer_part = urdformer_part.to(device)
+    # checkpoint = torch.load(args.ckpt_path)
+    # urdformer_part.load_state_dict(checkpoint["model_state_dict"])
     for img_path in tqdm(glob.glob(input_path + "/*")):
         if os.path.exists(f"{exp_dir}/{os.path.basename(img_path)[:-4]}"):
             continue
@@ -371,8 +375,8 @@ def collect_html(args):
         <table>
     """
     img_dir = args.image_path
-    pred_bbox_dir = "test_data/labels_filtered"
-    bbox_dir = "test_data/labels_gt"
+    pred_bbox_dir = f"{args.test_data}/labels_filtered"
+    bbox_dir = f"{args.test_data}/labels_gt"
     out_dir = args.exp_dir
     html = html_header
     relative_path = "../../"
@@ -413,11 +417,11 @@ def collect_html(args):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--image_path", default="test_data/images", type=str)
-    parser.add_argument("--exp_dir", default="exps/freezed_pred", type=str)
+    parser.add_argument("--image_path", default="test_data/hssd_images", type=str)
+    parser.add_argument("--exp_dir", default="exps/hssd_freezed_gt", type=str)
     parser.add_argument(
         "--label_dir",
-        default="test_data/labels_filtered",
+        default="test_data/hssd_labels_gt",
         type=str,
         help="directory to the 2D bounding boxes, either test_data/labels_gt or test_data/labels_pred",
     )
@@ -426,6 +430,8 @@ def main():
         action="store_true",
         help="use random meshes from partnet?",
     )
+    parser.add_argument("--ckpt_path", default="checkpoints/part.pth", type=str)
+    parser.add_argument("--test_data", default="test_data", type=str)
 
     ##################### IMPORTANT! ###############################
     # URDFormer replies on good bounding boxes of parts and ojects, you can achieve this by our annotation tool (~1min label per image)
