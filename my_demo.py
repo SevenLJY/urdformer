@@ -1,14 +1,15 @@
-import os
-import PIL
-import time
-import glob
-import torch
 import argparse
+import glob
+import os
+import time
+
 import numpy as np
+import PIL
 import pybullet as p
+import torch
+import torchvision.transforms as transforms
 from tqdm import tqdm
 from urdformer import URDFormer
-import torchvision.transforms as transforms
 from utils import my_visualization_parts, viz_graph
 
 
@@ -330,11 +331,17 @@ def evaluate(args, with_texture=False, headless=False):
 
     ########################  URDFormer Core  ##############################
     num_relations = 6  # the dimension of the relationship embedding
-    urdformer_part = URDFormer(num_relations=num_relations, num_roots=1)
-    urdformer_part = urdformer_part.to(device)
-    part_checkpoint = "checkpoints/part.pth"
-    checkpoint = torch.load(part_checkpoint)
-    urdformer_part.load_state_dict(checkpoint["model_state_dict"])
+    if args.original_ckpt:
+        urdformer_part = URDFormer(num_relations=num_relations, num_roots=1)
+        urdformer_part = urdformer_part.to(device)
+        checkpoint = torch.load(args.ckpt_path)
+        urdformer_part.load_state_dict(checkpoint["model_state_dict"])
+    else:
+        num_relations = 6  # the dimension of the relationship embedding
+        urdformer_part = URDFormer.load_from_checkpoint(args.ckpt_path, num_relations=num_relations, num_roots=1, part_mesh_num=10).to(device)
+
+    urdformer_part.eval()
+
     for img_path in tqdm(glob.glob(input_path + "/*")):
         if img_path in ["my_images/val_StorageFurniture_47466_18.png"]:  # buggy output
             # Error msg: corrupted size vs. prev_size
@@ -481,6 +488,17 @@ def main():
         "--random",
         action="store_true",
         help="use random meshes from partnet?",
+    )
+    parser.add_argument(
+        "--original_ckpt",
+        action="store_true",
+        help="using the original checkpoint",
+        default="checkpoints/part.pth",
+    )
+    parser.add_argument(
+        "--ckpt_path",
+        type=str,
+        help="Path to the checkpoint file",
     )
 
     ##################### IMPORTANT! ###############################
