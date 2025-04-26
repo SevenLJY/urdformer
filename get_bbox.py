@@ -1,26 +1,31 @@
-import numpy as np
-import PIL
-from urdformer import URDFormer
-import json
-import torch
-import cv2
-import pybullet as p
-from utils import visualization_global, visualization_parts, detection_config
-import torchvision.transforms as transforms
-from PIL import Image
-from scipy.spatial.transform import Rotation as Rot
 import argparse
-from utils import write_numpy
-from utils import write_urdfs
-from grounding_dino.detection import detector
-from grounding_dino.post_processing import post_processing, summary_kitchen
+import glob
+import json
 import os
 import time
-import glob
 import tkinter as tk
 from tkinter import filedialog, simpledialog
-from PIL import Image, ImageTk
+
+import cv2
+import numpy as np
+import PIL
+import pybullet as p
+import torch
+import torchvision.transforms as transforms
+from grounding_dino.detection import detector
+from grounding_dino.post_processing import post_processing, summary_kitchen
 from labeller import BoundingBoxApp
+from PIL import Image, ImageTk
+from scipy.spatial.transform import Rotation as Rot
+from urdformer import URDFormer
+from utils import (
+    detection_config,
+    visualization_global,
+    visualization_parts,
+    write_numpy,
+    write_urdfs,
+)
+
 
 # integrate the extracted texture map into URDFormer prediction
 def evaluate_real_image(image_tensor, bbox, masks, tgt_padding_mask, tgt_padding_relation_mask, urdformer, device):
