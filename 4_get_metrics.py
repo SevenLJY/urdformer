@@ -1,11 +1,13 @@
-import os
-import json
 import argparse
+import json
+import os
+
 import networkx as nx
-from tqdm import tqdm
-from my_metrics.cd import CD
 from my_metrics.aor import AOR
+from my_metrics.cd import CD
 from my_metrics.iou_cdist import IoU_cDist
+from tqdm import tqdm
+
 
 def get_hash(file, dag=True):
     tree = file["diffuse_tree"]
@@ -54,8 +56,11 @@ if __name__ == "__main__":
     valid_aor_cnt = 0
     i = 0
     for case in tqdm(cases):
-        tokens = case.split("_")
-        model_id = f"{tokens[0]}/{tokens[1]}"
+        tokens = case.split("@")
+        model_id = ''
+        for i in range(len(tokens)-1):
+            model_id += tokens[i] + '/'
+        model_id = model_id[:-1]
         pred = json.load(open(os.path.join(args.exp_dir, case, "object.json"), "r"))
         gt = json.load(open(os.path.join(args.gt_dir, model_id, "train_v3.json"), "r"))
 
@@ -70,8 +75,8 @@ if __name__ == "__main__":
 
         aid_cdist = scores['AS-cDist']
         rid_cdist = scores['RS-cDist']
-        aid_iou = scores['AS-IoU']
-        rid_iou = scores['RS-IoU']
+        aid_iou = 1. - scores['AS-IoU']
+        rid_iou = 1. - scores['RS-IoU']
         aid_cd = cds['AS-CD']
         rid_cd = cds['RS-CD']
 
