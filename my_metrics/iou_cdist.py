@@ -1,23 +1,26 @@
 '''
 This file computes the IoU-based and centroid-distance-based metrics\n
 '''
-import sys, os
+import os
+import sys
+
 sys.path.append(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 )
-import numpy as np
 from copy import deepcopy
+
+import numpy as np
+from my_metrics.giou import sampling_cDist, sampling_giou
 from my_objects.dict_utils import (
+    compute_overall_bbox_size,
+    find_part_mapping,
     get_base_part_idx,
     get_bbox_vertices,
     remove_handles,
-    compute_overall_bbox_size,
     rescale_object,
-    find_part_mapping,
     zero_center_object,
 )
 from my_objects.motions import transform_all_parts
-from my_metrics.giou import sampling_giou, sampling_cDist
 
 
 def _get_scores(
@@ -118,7 +121,7 @@ def _get_scores(
     rid_cdist = float(np.mean(per_part_cDist_avg_at_rest)) if len(per_part_cDist_avg_at_rest) > 0 else 1
 
     return {
-        "AS-IoU": aid_iou,
+        "AS-IoU": 1. - aid_iou,
         "AS-cDist": aid_cdist,
         "RS-IoU": rid_iou,
         "RS-cDist": rid_cdist
