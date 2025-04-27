@@ -1,6 +1,6 @@
 ## Our Added Files
+Run in order for inference and evaluation.
 ```
-# eval code
 0_prepare_img.py
 1_get_bbox.py
 2_test.py
