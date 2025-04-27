@@ -493,7 +493,6 @@ def main():
         "--original_ckpt",
         action="store_true",
         help="using the original checkpoint",
-        default="checkpoints/part.pth",
     )
     parser.add_argument(
         "--ckpt_path",

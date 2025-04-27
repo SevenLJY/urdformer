@@ -75,8 +75,8 @@ if __name__ == "__main__":
 
         aid_cdist = scores['AS-cDist']
         rid_cdist = scores['RS-cDist']
-        aid_iou = 1. - scores['AS-IoU']
-        rid_iou = 1. - scores['RS-IoU']
+        aid_iou = scores['AS-IoU']
+        rid_iou = scores['RS-IoU']
         aid_cd = cds['AS-CD']
         rid_cd = cds['RS-CD']
 

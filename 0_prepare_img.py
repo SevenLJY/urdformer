@@ -1,6 +1,10 @@
-import os, json
-from tqdm import tqdm
+import argparse
+import json
+import os
+
 from PIL import Image
+from tqdm import tqdm
+
 
 def _resize(img_path, tgt_size=256):
     '''
@@ -12,27 +16,51 @@ def _resize(img_path, tgt_size=256):
     img = _make_white_background(img)
     return img
 
+
 def _make_white_background(src_img):
     src_img.load() # required for png.split()
     background = Image.new("RGB", src_img.size, (255, 255, 255))
     background.paste(src_img, mask=src_img.split()[3]) # 3 is the alpha channel
     return background
 
+
 def load_model_ids(split_file, storage_only=False):
     with open(split_file, 'r') as f:
         data = json.load(f)
     if storage_only:
-        test_ids = [model_id for model_id in data['test'] if 'Storage' in model_id]
+        test_ids = [model_id for model_id in data['val'] if 'Storage' in model_id]
     else:
-        test_ids = data['test']
+        test_ids = data['val']
     return test_ids
 
+
 if __name__ == '__main__':
-    src_root = '/localhome/jla861/Documents/projects/im-gen-ao/data'
-    dst_root = 'test_data/images'
-    split_file = f'/localhome/jla861/Documents/projects/im-gen-ao/svr-ao/src/data/data_split.json'
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--src_root",
+        type=str,
+        help="The root directory of the source images",
+        required=True,
+    )
+    parser.add_argument(
+        "--dst_root",
+        type=str,
+        help="The root directory of the destination images",
+        required=True,
+    )
+    parser.add_argument(
+        "--split_file",
+        type=str,
+        help="The path to the split file",
+        required=True,
+    )
+    args = parser.parse_args()
+    src_root = args.src_root
+    dst_root = args.dst_root
+    split_file = args.split_file
     test_ids = load_model_ids(split_file)
-    
+    os.makedirs(dst_root, exist_ok=True)
+
     for model_id in tqdm(test_ids): # 76
         fname = model_id.replace('/', '_')
 
